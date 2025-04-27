@@ -1,0 +1,42 @@
+/* src/components/LoginPage.css */
+.login-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 80vh; /* Take up most of the viewport height */
+    text-align: center;
+    padding: 20px;
+  }
+  
+  .login-container h1 {
+    color: #1DB954; /* Spotify green */
+    margin-bottom: 15px;
+  }
+  
+  .login-container p {
+    font-size: 1.1em;
+    color: #555;
+    margin-bottom: 30px;
+  }
+  
+  .login-button {
+    display: inline-block;
+    background-color: #1DB954;
+    color: white;
+    padding: 12px 25px;
+    border: none;
+    border-radius: 50px; /* Fully rounded */
+    font-size: 1.1em;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.1s ease;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+  
+  .login-button:hover {
+    background-color: #1ed760; /* Lighter green */
+    transform: scale(1.05);
+    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+  }
