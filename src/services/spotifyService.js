@@ -96,7 +96,8 @@ export const fetchPlaylists = async (token) => {
 export const fetchPlaylistTracks = async (token, playlistId) => {
     if (!playlistId) throw new Error("Playlist ID must be provided to fetch tracks.");
     // Specify fields to minimize data transfer, fetches up to 100 tracks per page
-    const fields = 'items(track(id,name,artists(name),album(name),duration_ms)),next';
+    // Added track URI to the fields needed for removal logic
+    const fields = 'items(track(id,uri,name,artists(name),album(name),duration_ms)),next';
     const initialUrl = `${BASE_URL}/playlists/${playlistId}/tracks?limit=100&fields=${encodeURIComponent(fields)}`;
     return fetchPaginated(token, initialUrl);
 };
@@ -176,8 +177,6 @@ export const addTracksToPlaylist = async (token, playlistId, trackIds) => {
                 try { errorData = await res.json(); } catch (e) {}
                 const chunkIndex = i / chunkSize;
                 console.error(`Spotify API Error adding tracks (${url} - chunk ${chunkIndex}):`, errorData);
-                // Note: If one chunk fails, previous chunks were already added.
-                // Consider if rollback logic is needed (complex). Usually, just report the error.
                 throw new Error(`Failed to add tracks (chunk ${chunkIndex}, status ${res.status}): ${errorData.error?.message || res.statusText}`);
             }
             // Store the snapshot_id from the last successful request
@@ -195,16 +194,71 @@ export const addTracksToPlaylist = async (token, playlistId, trackIds) => {
 };
 
 /**
+ * Removes specified tracks (all occurrences) from a specific playlist.
+ * Handles chunking for large numbers of tracks to remove.
+ * @param {string} token - The Spotify access token.
+ * @param {string} playlistId - The ID of the playlist to modify.
+ * @param {Array<{uri: string}>} tracksToRemove - An array of objects, each containing the 'uri' of the track to remove. Max 100 per request.
+ * @returns {Promise<{snapshot_id: string|null}>} A promise resolving to an object containing the final snapshot ID of the playlist, or null if no tracks were removed.
+ * @throws {Error} If the API request fails.
+ */
+export const removeTracksFromPlaylist = async (token, playlistId, tracksToRemove) => {
+    if (!playlistId) throw new Error("Playlist ID must be provided to remove tracks.");
+    if (!Array.isArray(tracksToRemove) || tracksToRemove.length === 0) {
+        console.warn("No tracks specified for removal.");
+        return { snapshot_id: null }; // Indicate no operation needed
+    }
+
+    const url = `${BASE_URL}/playlists/${playlistId}/tracks`;
+    const chunkSize = 100; // Spotify API limit
+    let snapshotId = null;
+
+    try {
+        for (let i = 0; i < tracksToRemove.length; i += chunkSize) {
+            const chunk = tracksToRemove.slice(i, i + chunkSize);
+            const res = await fetch(url, {
+                method: 'DELETE', // Use DELETE method
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                // Body format for removing specific tracks by URI
+                body: JSON.stringify({ tracks: chunk }),
+            });
+
+            if (!res.ok) {
+                let errorData = {};
+                try { errorData = await res.json(); } catch (e) {}
+                const chunkIndex = i / chunkSize;
+                console.error(`Spotify API Error removing tracks (${url} - chunk ${chunkIndex}):`, errorData);
+                throw new Error(`Failed to remove tracks (chunk ${chunkIndex}, status ${res.status}): ${errorData.error?.message || res.statusText}`);
+            }
+            const data = await res.json();
+            snapshotId = data.snapshot_id; // Update with the latest snapshot ID
+        }
+        return { snapshot_id: snapshotId }; // Return the final snapshot ID
+    } catch (error) {
+        console.error("Error during removeTracksFromPlaylist loop:", error);
+        // Don't re-wrap if it's already the error we threw
+        if (error.message.startsWith("Failed to remove tracks")) throw error;
+        throw new Error(`Network error removing tracks from playlist: ${error.message}`);
+    }
+};
+
+
+/**
  * Convenience function to get only the user ID for the current user.
  * @param {string} token - The Spotify access token.
  * @returns {Promise<string>} A promise that resolves to the user's Spotify ID.
- * @throws {Error} If fetching the user profile fails.
+ * @throws {Error} If fetching the user profile fails or ID is missing.
  */
 export const getUserId = async (token) => {
     // Reuses fetchUser and extracts the ID
     const user = await fetchUser(token);
     if (!user?.id) {
+        // This case might happen if the token is valid but user data is incomplete
+        console.error("User profile data fetched successfully but missing ID:", user);
         throw new Error("Could not retrieve User ID from user profile data.");
     }
     return user.id;
-}
+};

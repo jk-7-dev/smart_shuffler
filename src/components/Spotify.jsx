@@ -1,82 +1,95 @@
 // src/components/Spotify.jsx
 import React, { useEffect, useState } from 'react';
-// Removed unused fetchUser import
+// Import services - ensure removeTracksFromPlaylist is imported
 import {
     fetchPlaylists,
     fetchPlaylistTracks,
     createPlaylist,
     addTracksToPlaylist,
-    getUserId
+    getUserId,
+    removeTracksFromPlaylist // <-- Ensure this is imported
 } from '../services/spotifyService';
 import { sendPlaylistToShuffle } from '../services/shuffleService';
-import { parseCsvFile } from '../utils/csvUtils';
+// Import utils
+import { parseCsvFile, exportTracksToCsv } from '../utils/csvUtils';
 import './App.css';
 
 // Receive token and onLogout function as props
 function Spotify({ token, onLogout }) {
-  // State managed within this component
+  // --- State ---
   const [playlists, setPlaylists] = useState([]);
   const [tracks, setTracks] = useState([]);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [csvPlaylistName, setCsvPlaylistName] = useState('');
   const [csvTracks, setCsvTracks] = useState([]);
-  // Removed unused userInfo/setUserInfo state
 
-  // Loading States
+  // --- Loading States ---
   const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
   const [isLoadingTracks, setIsLoadingTracks] = useState(false);
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
   const [isCreatingCsvPlaylist, setIsCreatingCsvPlaylist] = useState(false);
   const [isShuffling, setIsShuffling] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  // Added back state for removing duplicates
+  const [isRemovingDuplicates, setIsRemovingDuplicates] = useState(false);
+  // Tracks which playlist item is busy
   const [loadingPlaylistId, setLoadingPlaylistId] = useState(null);
 
-  // Effect Hook (removed setUserInfo usage)
+  // --- Effect Hook ---
   useEffect(() => {
     if (token) {
         getUserId(token)
             .then(id => console.log("Spotify Component Mounted with User ID:", id))
             .catch(err => {
                 console.error("Failed to fetch user info on mount:", err);
-                onLogout();
+                handleApiError(err, onLogout); // Use centralized handler
             });
-        // handleFetchPlaylists(); // Still optional: fetch playlists on load
+        // handleFetchPlaylists(); // Optional: fetch playlists on load
     }
-  }, [token, onLogout]);
+  }, [token, onLogout]); // Dependencies
 
-  // --- Handlers (with loading state updates) ---
+  // --- Centralized Error Handling ---
+  const handleApiError = (error, logoutCallback) => {
+      console.error("API Error:", error); // Log the full error
+      const message = String(error?.message || '').toLowerCase();
+      // Check for common auth-related errors
+      if (message.includes('401') || message.includes('403') || message.includes('token') || message.includes('unauthorized') || message.includes('failed to fetch user profile')) {
+          alert(`Authentication error: ${error.message}. Logging out.`);
+          logoutCallback(); // Use the passed logout function
+      } else {
+          // For non-auth errors, just show the message
+          alert(`An error occurred: ${error.message}`);
+      }
+  };
+
+  // --- Handlers ---
 
   const handleFetchPlaylists = async () => {
-    if (!token) return;
+    if (!token || isLoadingPlaylists) return;
     setIsLoadingPlaylists(true);
     setLoadingPlaylistId(null);
     try {
         const items = await fetchPlaylists(token);
         setPlaylists(items);
-        setTracks([]);
+        setTracks([]); // Clear tracks when fetching playlists
     } catch (error) {
-        console.error("Failed to fetch playlists:", error);
-        alert(`Failed to fetch playlists: ${error.message}. Session might be invalid.`);
-        if (error.message.includes('401') || error.message.includes('token') || error.message.includes('ailed to fetch user profile')) { // Added check from getUserId failure
-             onLogout();
-        }
+        handleApiError(error, onLogout);
     } finally {
         setIsLoadingPlaylists(false);
     }
   };
 
   const handleFetchTracks = async (playlistId) => {
-    if (!token) return;
+    // Prevent action if already processing this playlist
+    if (!token || (loadingPlaylistId === playlistId && (isLoadingTracks || isShuffling || isExporting || isRemovingDuplicates))) return;
     setIsLoadingTracks(true);
     setLoadingPlaylistId(playlistId);
     try {
+        // Ensure fetchPlaylistTracks requests the 'uri' field
         const items = await fetchPlaylistTracks(token, playlistId);
         setTracks(items);
     } catch (error) {
-        console.error("Failed to fetch tracks:", error);
-        alert(`Failed to fetch tracks: ${error.message}`);
-         if (error.message.includes('401') || error.message.includes('token') || error.message.includes('ailed to fetch user profile')) {
-             onLogout();
-        }
+        handleApiError(error, onLogout);
     } finally {
         setIsLoadingTracks(false);
         setLoadingPlaylistId(null);
@@ -88,18 +101,12 @@ function Spotify({ token, onLogout }) {
     setIsCreatingPlaylist(true);
     try {
         const userId = await getUserId(token);
-        // Removed unused 'playlist' variable assignment:
         await createPlaylist(token, userId, newPlaylistName, 'New playlist created via Smart Shuffler');
-        // If createPlaylist succeeds, continue:
         alert('Playlist created successfully!');
         setNewPlaylistName('');
         await handleFetchPlaylists(); // Refresh list
     } catch(error) {
-        console.error("Failed to create playlist:", error);
-        alert(`Failed to create playlist: ${error.message}`);
-         if (error.message.includes('401') || error.message.includes('token') || error.message.includes('ailed to fetch user profile')) {
-             onLogout();
-        }
+        handleApiError(error, onLogout);
     } finally {
         setIsCreatingPlaylist(false);
     }
@@ -118,7 +125,7 @@ function Spotify({ token, onLogout }) {
             else { alert(`${ids.length} track IDs loaded from CSV.`); }
             setCsvTracks(ids);
         }
-        if (inputElement) { inputElement.value = ''; }
+        if (inputElement) { inputElement.value = ''; } // Clear file input
     });
   };
 
@@ -129,32 +136,30 @@ function Spotify({ token, onLogout }) {
     try {
         const userId = await getUserId(token);
         const playlist = await createPlaylist(token, userId, csvPlaylistName, 'Created from CSV upload');
-        if (!playlist?.id) throw new Error("Playlist creation failed or returned invalid data."); // Added check
+        if (!playlist?.id) throw new Error("Playlist creation failed or returned invalid data.");
         await addTracksToPlaylist(token, playlist.id, csvTracks);
         alert('Playlist created from CSV successfully!');
         setCsvTracks([]);
         setCsvPlaylistName('');
         await handleFetchPlaylists();
     } catch (error) {
-        console.error("Failed to create playlist from CSV:", error);
-        alert(`Failed to create playlist from CSV: ${error.message}`);
-        if (error.message.includes('401') || error.message.includes('token') || error.message.includes('ailed to fetch user profile')) {
-             onLogout();
-        }
+        handleApiError(error, onLogout);
     } finally {
         setIsCreatingCsvPlaylist(false);
     }
   };
 
   const handleShufflePlaylist = async (playlistId, playlistName) => {
-    if (!token || isShuffling) return;
+     // Prevent action if already processing this playlist
+    if (!token || (loadingPlaylistId === playlistId && (isLoadingTracks || isShuffling || isExporting || isRemovingDuplicates))) return;
     setIsShuffling(true);
     setLoadingPlaylistId(playlistId);
+    let userAlerted = false; // Flag to prevent double alerts
     try {
         const trackItems = await fetchPlaylistTracks(token, playlistId);
-        if (!trackItems || trackItems.length === 0) { alert("Playlist has no tracks to shuffle."); throw new Error("Empty playlist");} // Simplified check
+        if (!trackItems || trackItems.length === 0) { alert("Playlist has no tracks to shuffle."); userAlerted = true; throw new Error("Empty playlist");}
         const tracksToSend = trackItems.map(item => item.track).filter(track => track?.id);
-        if (tracksToSend.length === 0) { alert("No valid track data found."); throw new Error("No valid tracks");} // Simplified check
+        if (tracksToSend.length === 0) { alert("No valid track data found."); userAlerted = true; throw new Error("No valid tracks");}
 
         const shuffledTracks = await sendPlaylistToShuffle(tracksToSend);
         if (!shuffledTracks || shuffledTracks.length === 0) throw new Error("Shuffling service returned no tracks.");
@@ -164,20 +169,19 @@ function Spotify({ token, onLogout }) {
         const userId = await getUserId(token);
         const shuffledPlaylistName = `${playlistName} - Shuffled`;
         const newPlaylist = await createPlaylist(token, userId, shuffledPlaylistName, 'Smart Shuffled version');
-         if (!newPlaylist?.id) throw new Error("Failed to create the shuffled playlist container on Spotify."); // Added check
+        if (!newPlaylist?.id) throw new Error("Failed to create the shuffled playlist container on Spotify.");
 
         await addTracksToPlaylist(token, newPlaylist.id, shuffledIds);
-        alert('Shuffled playlist created!');
+        alert('Shuffled playlist created!'); // Success alert
+        userAlerted = true;
         await handleFetchPlaylists();
 
     } catch (error) {
-        // Avoid alerting for self-thrown errors used for flow control if alert was already shown
-        if (error.message !== "Empty playlist" && error.message !== "No valid tracks") {
-            console.error('Error during shuffle:', error);
-            alert(`Shuffling failed: ${error.message}`);
-        }
-         if (error.message.includes('401') || error.message.includes('token') || error.message.includes('ailed to fetch user profile')) {
-             onLogout();
+        // Only alert if we haven't already shown one for empty/invalid tracks
+        if (!userAlerted) {
+             handleApiError(error, onLogout); // Use centralized handler for other errors
+        } else {
+            console.error('Shuffle error after initial check:', error); // Log internal errors
         }
     } finally {
         setIsShuffling(false);
@@ -185,7 +189,117 @@ function Spotify({ token, onLogout }) {
     }
   };
 
-  // --- Render Logic (with loading state usage) ---
+  const handleExportPlaylist = async (playlistId, playlistName) => {
+     // Prevent action if already processing this playlist
+    if (!token || (loadingPlaylistId === playlistId && (isLoadingTracks || isShuffling || isExporting || isRemovingDuplicates))) return;
+    setIsExporting(true);
+    setLoadingPlaylistId(playlistId);
+    try {
+        console.log(`Fetching tracks for playlist export: ${playlistId}`);
+        const trackItems = await fetchPlaylistTracks(token, playlistId);
+        console.log(`Fetched ${trackItems.length} tracks for export`);
+
+        if (!trackItems || trackItems.length === 0) {
+            alert("Playlist is empty. Nothing to export.");
+            return; // Exit early
+        }
+
+        exportTracksToCsv(trackItems, playlistName); // Call the utility
+        // Optional: Add a success notification if needed
+        // alert(`Export started for "${playlistName}". Check your downloads.`);
+
+    } catch (error) {
+        handleApiError(error, onLogout);
+    } finally {
+        setIsExporting(false);
+        setLoadingPlaylistId(null);
+    }
+  };
+
+  // --- Added: Handler for Removing Duplicates ---
+  const handleRemoveDuplicates = async (playlistId, playlistName) => {
+      // Prevent action if already processing this playlist
+      if (!token || (loadingPlaylistId === playlistId && (isLoadingTracks || isShuffling || isExporting || isRemovingDuplicates))) return;
+
+      // Confirm with the user
+      const confirmation = window.confirm(`This will permanently remove duplicate tracks (based on Spotify ID) from your playlist "${playlistName}". This action cannot be undone. Are you sure?`);
+      if (!confirmation) {
+          return; // Stop if user cancels
+      }
+
+      setIsRemovingDuplicates(true);
+      setLoadingPlaylistId(playlistId);
+      let duplicatesFoundCount = 0;
+
+      try {
+          console.log(`Fetching tracks to find duplicates in playlist: ${playlistId}`);
+          // Ensure fetchPlaylistTracks gets the URI field
+          const trackItems = await fetchPlaylistTracks(token, playlistId);
+          console.log(`Fetched ${trackItems.length} tracks`);
+
+          if (!trackItems || trackItems.length === 0) {
+              alert("Playlist is empty, no duplicates to remove.");
+              return; // Exit early
+          }
+
+          const seenTrackIds = new Set();
+          // Need to collect { uri: string } objects for the API call
+          const duplicatesToRemove = [];
+
+          trackItems.forEach(item => {
+              // Check that track, id, and uri exist
+              if (item?.track?.id && item?.track?.uri) {
+                  const trackId = item.track.id;
+                  const trackUri = item.track.uri;
+                  if (seenTrackIds.has(trackId)) {
+                      // This is a duplicate occurrence, add its URI object to the list
+                      duplicatesToRemove.push({ uri: trackUri });
+                  } else {
+                      // First time seeing this track ID, add it to the set
+                      seenTrackIds.add(trackId);
+                  }
+              } else {
+                  console.warn("Skipping item with missing track data:", item);
+              }
+          });
+
+          duplicatesFoundCount = duplicatesToRemove.length;
+          console.log(`Found ${duplicatesFoundCount} duplicate track occurrence(s) to remove.`);
+
+          if (duplicatesFoundCount === 0) {
+              alert("No duplicate tracks found in this playlist.");
+              return; // Exit early
+          }
+
+          // Call the service function to remove tracks
+          const result = await removeTracksFromPlaylist(token, playlistId, duplicatesToRemove);
+
+          if (result.snapshot_id) {
+                alert(`${duplicatesFoundCount} duplicate track occurrence(s) removed successfully from "${playlistName}"!`);
+                // Refresh playlists to update track counts
+                await handleFetchPlaylists();
+                // Clear the detailed track view if it was for the modified playlist
+                 if (tracks.length > 0 && loadingPlaylistId === playlistId) {
+                     setTracks([]);
+                 }
+          } else if (duplicatesFoundCount > 0) {
+                // This might happen if the API call technically succeeded but returned no snapshot_id
+                // or if the service function returned null because the input array was empty (shouldn't happen here)
+                console.warn("Removal API call finished but no snapshot ID returned.");
+                alert("Duplicates identified, but there might have been an issue during removal. Please check the playlist.");
+          }
+          // If duplicatesFoundCount was 0, we already alerted and returned.
+
+      } catch (error) {
+            handleApiError(error, onLogout); // Use centralized handler
+      } finally {
+            setIsRemovingDuplicates(false);
+            setLoadingPlaylistId(null);
+      }
+  };
+
+
+  // --- Render Logic ---
   return (
     <div>
       <button onClick={onLogout} style={{ position: 'absolute', top: '10px', right: '10px' }}>Logout</button>
@@ -197,31 +311,42 @@ function Spotify({ token, onLogout }) {
           {isLoadingPlaylists ? 'Loading...' : 'Fetch My Playlists'}
         </button>
         {isLoadingPlaylists && <p>Loading playlists...</p>}
+        {!isLoadingPlaylists && playlists.length === 0 && <p>No playlists found. Try creating one!</p>}
         {!isLoadingPlaylists && playlists.length > 0 && (
           <ul>
-            {playlists.map((playlist) => (
-              <li key={playlist.id}>
-                <span>{playlist.name} ({playlist.tracks?.total ?? 0} tracks)</span>
-                <div>
-                  <button
-                    onClick={() => handleFetchTracks(playlist.id)}
-                    disabled={(isLoadingTracks || isShuffling) && loadingPlaylistId === playlist.id} // Disable if loading tracks OR shuffling this one
-                  >
-                    {(isLoadingTracks && loadingPlaylistId === playlist.id) ? 'Loading...' : 'View Tracks'}
-                  </button>
-                  <button
-                    onClick={() => handleShufflePlaylist(playlist.id, playlist.name)}
-                    disabled={(isShuffling || isLoadingTracks) && loadingPlaylistId === playlist.id} // Disable if shuffling OR loading tracks for this one
-                  >
-                    {(isShuffling && loadingPlaylistId === playlist.id) ? 'Shuffling...' : 'Shuffle'}
-                  </button>
-                </div>
-              </li>
-            ))}
+            {playlists.map((playlist) => {
+                // Determine if *any* action is loading for this specific playlist item
+                const isItemLoading = loadingPlaylistId === playlist.id && (isLoadingTracks || isShuffling || isExporting || isRemovingDuplicates);
+                return (
+                  <li key={playlist.id}>
+                    <span>{playlist.name} ({playlist.tracks?.total ?? 0} tracks)</span>
+                    <div>
+                      {/* View Tracks Button */}
+                      <button onClick={() => handleFetchTracks(playlist.id)} disabled={isItemLoading}>
+                        {(isLoadingTracks && loadingPlaylistId === playlist.id) ? 'Loading...' : 'View Tracks'}
+                      </button>
+                      {/* Shuffle Button */}
+                      <button onClick={() => handleShufflePlaylist(playlist.id, playlist.name)} disabled={isItemLoading}>
+                        {(isShuffling && loadingPlaylistId === playlist.id) ? 'Shuffling...' : 'Shuffle'}
+                      </button>
+                      {/* Export Button */}
+                      <button onClick={() => handleExportPlaylist(playlist.id, playlist.name)} disabled={isItemLoading}>
+                        {(isExporting && loadingPlaylistId === playlist.id) ? 'Exporting...' : 'Export CSV'}
+                      </button>
+                      {/* Added back: Remove Duplicates Button */}
+                       <button
+                         onClick={() => handleRemoveDuplicates(playlist.id, playlist.name)}
+                         disabled={isItemLoading}
+                         title="Remove duplicate tracks based on Spotify ID"
+                       >
+                         {(isRemovingDuplicates && loadingPlaylistId === playlist.id) ? 'Cleaning...' : 'Remove Dups'}
+                       </button>
+                    </div>
+                  </li>
+                );
+              })}
           </ul>
         )}
-        {/* Add case for no playlists found after loading */}
-        {!isLoadingPlaylists && playlists.length === 0 && <p>No playlists found. Try creating one!</p>}
       </div>
 
       {/* Display Tracks Section */}
@@ -230,6 +355,7 @@ function Spotify({ token, onLogout }) {
             <div>
                 <h2>Tracks in Selected Playlist</h2>
                  <ul>
+                    {/* Track list rendering */}
                     {tracks.map((item, index) => (
                         item.track ? (
                             <li key={item.track.id || index}>
@@ -240,49 +366,23 @@ function Spotify({ token, onLogout }) {
                             </li>
                         ) : <li key={`missing-${index}`}>Track data missing</li>
                     ))}
-                </ul>
+                 </ul>
             </div>
         )}
 
       {/* Create New Playlist Section */}
       <div>
         <h2>Create New Playlist</h2>
-        <input
-            type="text"
-            value={newPlaylistName}
-            onChange={(e) => setNewPlaylistName(e.target.value)}
-            placeholder="Enter new playlist name"
-            disabled={isCreatingPlaylist}
-        />
-        <button onClick={handleCreatePlaylist} disabled={!newPlaylistName || isCreatingPlaylist}>
-            {isCreatingPlaylist ? 'Creating...' : 'Create Playlist'}
-        </button>
+        <input type="text" value={newPlaylistName} onChange={(e) => setNewPlaylistName(e.target.value)} placeholder="Enter new playlist name" disabled={isCreatingPlaylist}/>
+        <button onClick={handleCreatePlaylist} disabled={!newPlaylistName || isCreatingPlaylist}>{isCreatingPlaylist ? 'Creating...' : 'Create Playlist'}</button>
       </div>
 
       {/* Create Playlist from CSV Section */}
       <div>
         <h2>Create Playlist from CSV</h2>
-        <input
-            type="text"
-            value={csvPlaylistName}
-            onChange={(e) => setCsvPlaylistName(e.target.value)}
-            placeholder="Enter name for CSV playlist"
-            disabled={isCreatingCsvPlaylist}
-        />
-        <input
-            type="file"
-            accept=".csv"
-            onChange={handleCsvUpload}
-            disabled={isCreatingCsvPlaylist}
-            // Add key to allow re-uploading same file name
-            key={csvPlaylistName + csvTracks.length} // Simple key reset
-        />
-        <button
-            onClick={handleCreatePlaylistFromCsv}
-            disabled={!csvPlaylistName || csvTracks.length === 0 || isCreatingCsvPlaylist}
-        >
-          {isCreatingCsvPlaylist ? 'Creating...' : `Create Playlist from CSV (${csvTracks.length} tracks loaded)`}
-        </button>
+         <input type="text" value={csvPlaylistName} onChange={(e) => setCsvPlaylistName(e.target.value)} placeholder="Enter name for CSV playlist" disabled={isCreatingCsvPlaylist}/>
+         <input type="file" accept=".csv" onChange={handleCsvUpload} disabled={isCreatingCsvPlaylist} key={csvPlaylistName + csvTracks.length} />
+         <button onClick={handleCreatePlaylistFromCsv} disabled={!csvPlaylistName || csvTracks.length === 0 || isCreatingCsvPlaylist}> {isCreatingCsvPlaylist ? 'Creating...' : `Create Playlist from CSV (${csvTracks.length} tracks loaded)`} </button>
       </div>
     </div>
   );
