@@ -1,264 +1,170 @@
 // src/services/spotifyService.js
 
 /**
- * The base URL for the Spotify Web API.
- * IMPORTANT: Replace placeholder URLs if necessary. Use environment variables for production.
+ * The base URL for your backend server (BFF).
+ * Use environment variables for flexibility (e.g., process.env.REACT_APP_BACKEND_URL).
  */
-const BASE_URL = 'https://api.spotify.com/v1'; // Use actual Spotify API base URL: https://api.spotify.com/v1
+const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
-// --- Helper for paginated requests ---
 /**
- * Fetches all items from a paginated Spotify API endpoint.
- * @param {string} token - The Spotify access token.
- * @param {string} url - The initial URL of the paginated resource.
- * @returns {Promise<Array<object>>} A promise that resolves to an array containing all items from all pages.
- * @throws {Error} If any API request fails.
+ * Helper function to handle fetch requests to the backend API proxy.
+ * Includes credentials to send session cookies.
+ * Parses JSON response and handles basic HTTP errors.
+ * @param {string} endpoint - The backend API endpoint path (e.g., '/api/spotify/playlists').
+ * @param {object} [options={}] - Optional fetch options (method, headers, body).
+ * @returns {Promise<any>} A promise that resolves to the JSON response data from the backend.
+ * @throws {Error} If the fetch fails or the backend returns an error status.
  */
-const fetchPaginated = async (token, url) => {
-    let items = [];
-    let nextUrl = url;
+const fetchFromBackend = async (endpoint, options = {}) => {
+    const url = `${BACKEND_API_BASE_URL}${endpoint}`;
+    console.log(`Calling backend: ${options.method || 'GET'} ${url}`);
+
+    const fetchOptions = {
+        credentials: 'include', // Send cookies
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            ...options.headers,
+        },
+        ...options,
+    };
+
     try {
-        while (nextUrl) {
-            const res = await fetch(nextUrl, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!res.ok) {
-                // Attempt to parse error details from Spotify
-                let errorData = {};
-                try {
-                    errorData = await res.json();
-                } catch (e) {
-                    // Ignore if response is not JSON
-                }
-                console.error(`Spotify API Error during pagination (${nextUrl}):`, res.status, errorData);
-                throw new Error(`API request failed (${res.status}): ${errorData.error?.message || res.statusText || 'Unknown error'}`);
+        const response = await fetch(url, fetchOptions);
+
+        if (!response.ok) {
+            let errorData = { message: `HTTP error! Status: ${response.status}` };
+            try {
+                errorData = await response.json();
+            } catch (e) {
+                 console.warn("Could not parse error response as JSON.");
             }
-            const data = await res.json();
-            items = items.concat(data.items || []);
-            nextUrl = data.next; // Get URL for the next page, or null if none
+            // Use error message from backend if available
+            throw new Error(errorData.error || errorData.message || `Request failed with status ${response.status}`);
         }
-        return items;
+
+        if (response.status === 204) { // No Content
+            return null;
+        }
+        return await response.json(); // Parse success response
+
     } catch (error) {
-        // Log the error originating from the loop or initial throw
-        console.error("Error during paginated fetch processing:", error);
-        throw error; // Re-throw the caught error
+        console.error(`Error fetching from backend endpoint ${endpoint}:`, error);
+        throw error; // Re-throw
     }
 };
 
-// --- Service Functions ---
+
+// --- Service Functions (Updated to use Backend Proxy) ---
 
 /**
- * Fetches the profile information for the current user.
- * @param {string} token - The Spotify access token.
- * @returns {Promise<object>} A promise that resolves to the user profile object.
- * @throws {Error} If the API request fails.
+ * Fetches the current user's profile information from the backend proxy.
+ * Used to check authentication status and get basic info.
+ * @returns {Promise<object>} User profile data (e.g., { display_name, id, email }).
+ * @throws {Error} If the backend request fails (e.g., user not logged in - likely 401).
  */
-export const fetchUser = async (token) => {
-    const url = `${BASE_URL}/me`;
-    try {
-        const res = await fetch(url, {
-            headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) {
-             let errorData = {};
-             try { errorData = await res.json(); } catch (e) {}
-             console.error(`Spotify API Error (${url}):`, errorData);
-             throw new Error(`Failed to fetch user profile (${res.status}): ${errorData.error?.message || res.statusText}`);
-        }
-        return await res.json();
-    } catch (error) {
-        console.error("Network/fetch error in fetchUser:", error);
-        // Don't re-wrap if it's already the error we threw
-        if (error.message.startsWith("Failed to fetch user profile")) throw error;
-        throw new Error(`Network error fetching user profile: ${error.message}`);
-    }
+export const fetchCurrentUser = async () => {
+    // Calls the backend endpoint that uses the session token
+    return fetchFromBackend('/api/spotify/me');
 };
 
 /**
- * Fetches all playlists for the current user.
- * @param {string} token - The Spotify access token.
- * @returns {Promise<Array<object>>} A promise that resolves to an array of playlist objects.
- * @throws {Error} If the API request fails during pagination.
+ * Fetches the user's playlists from the backend proxy.
+ * @returns {Promise<Array<object>>} Array of playlist objects.
+ * @throws {Error} If the backend request fails.
  */
-export const fetchPlaylists = async (token) => {
-    // Fetches up to 50 playlists per request page
-    const initialUrl = `${BASE_URL}/me/playlists?limit=50`;
-    return fetchPaginated(token, initialUrl);
+export const fetchPlaylists = async () => {
+    // Backend handles pagination and auth
+    return fetchFromBackend('/api/spotify/playlists');
 };
 
 /**
- * Fetches all tracks for a specific playlist.
- * @param {string} token - The Spotify access token.
+ * Fetches tracks for a specific playlist from the backend proxy.
  * @param {string} playlistId - The ID of the playlist.
- * @returns {Promise<Array<object>>} A promise that resolves to an array of playlist track objects (containing track details).
- * @throws {Error} If the API request fails during pagination.
+ * @returns {Promise<Array<object>>} Array of playlist track objects.
+ * @throws {Error} If the backend request fails.
  */
-export const fetchPlaylistTracks = async (token, playlistId) => {
-    if (!playlistId) throw new Error("Playlist ID must be provided to fetch tracks.");
-    // Specify fields to minimize data transfer, fetches up to 100 tracks per page
-    // Added track URI to the fields needed for removal logic
-    const fields = 'items(track(id,uri,name,artists(name),album(name),duration_ms)),next';
-    const initialUrl = `${BASE_URL}/playlists/${playlistId}/tracks?limit=100&fields=${encodeURIComponent(fields)}`;
-    return fetchPaginated(token, initialUrl);
+export const fetchPlaylistTracks = async (playlistId) => {
+    if (!playlistId) throw new Error("Playlist ID must be provided.");
+    // Backend handles pagination, auth, and field selection
+    return fetchFromBackend(`/api/spotify/playlists/${playlistId}/tracks`);
 };
 
 /**
- * Creates a new playlist for the specified user.
- * @param {string} token - The Spotify access token.
- * @param {string} userId - The user's Spotify ID.
+ * Creates a new playlist via the backend proxy.
  * @param {string} name - The name for the new playlist.
- * @param {string} [description=''] - Optional description for the playlist.
- * @returns {Promise<object>} A promise that resolves to the newly created playlist object.
- * @throws {Error} If the API request fails.
+ * @param {string} [description=''] - Optional description.
+ * @returns {Promise<object>} The newly created playlist object.
+ * @throws {Error} If the backend request fails.
  */
-export const createPlaylist = async (token, userId, name, description = '') => {
-     if (!userId || !name) throw new Error("User ID and Playlist Name must be provided to create a playlist.");
-     const url = `${BASE_URL}/users/${userId}/playlists`;
-     try {
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
-            // Creates a private, non-collaborative playlist by default
-            body: JSON.stringify({ name, description, public: false, collaborative: false }),
-        });
-
-        if (!res.ok) {
-            let errorData = {};
-            try { errorData = await res.json(); } catch (e) {}
-            console.error(`Spotify API Error (${url}):`, errorData);
-            throw new Error(`Failed to create playlist (${res.status}): ${errorData.error?.message || res.statusText}`);
-        }
-        return await res.json();
-     } catch (error) {
-        console.error("Network/fetch error in createPlaylist:", error);
-        if (error.message.startsWith("Failed to create playlist")) throw error;
-        throw new Error(`Network error creating playlist: ${error.message}`);
-     }
+export const createPlaylist = async (name, description = '') => {
+    if (!name) throw new Error("Playlist Name must be provided.");
+    // Backend gets userId from session
+    return fetchFromBackend('/api/spotify/playlists', {
+        method: 'POST',
+        body: JSON.stringify({ name, description }),
+    });
 };
 
 /**
- * Adds tracks to a specified playlist. Handles chunking for large track lists.
- * @param {string} token - The Spotify access token.
- * @param {string} playlistId - The ID of the playlist to add tracks to.
- * @param {Array<string>} trackIds - An array of Spotify Track IDs (not URIs).
- * @returns {Promise<{snapshot_id: string|null}>} A promise resolving to an object containing the snapshot ID of the playlist after the last successful add operation, or null if no tracks were added.
- * @throws {Error} If any chunk request fails.
+ * Adds tracks to a playlist via the backend proxy.
+ * @param {string} playlistId - The ID of the playlist.
+ * @param {Array<string>} trackIds - Array of Spotify Track IDs.
+ * @returns {Promise<object>} Response from the backend (e.g., { snapshot_id }).
+ * @throws {Error} If the backend request fails.
  */
-export const addTracksToPlaylist = async (token, playlistId, trackIds) => {
-    if (!playlistId) throw new Error("Playlist ID must be provided to add tracks.");
+export const addTracksToPlaylist = async (playlistId, trackIds) => {
+    if (!playlistId) throw new Error("Playlist ID must be provided.");
     if (!Array.isArray(trackIds) || trackIds.length === 0) {
-        console.warn("No track IDs provided to addTracksToPlaylist.");
-        return { snapshot_id: null }; // Indicate no tracks added, not an error
+        console.warn("No track IDs provided to add.");
+        return { snapshot_id: null };
     }
-
-    // Convert IDs to Spotify URIs
-    const uris = trackIds.map(id => `spotify:track:${id}`);
-    const url = `${BASE_URL}/playlists/${playlistId}/tracks`;
-    const chunkSize = 100; // Spotify API limit per request
-    let snapshotId = null; // To store the latest snapshot ID
-
-    try {
-        for (let i = 0; i < uris.length; i += chunkSize) {
-            const chunk = uris.slice(i, i + chunkSize);
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ uris: chunk }),
-            });
-
-            if (!res.ok) {
-                let errorData = {};
-                try { errorData = await res.json(); } catch (e) {}
-                const chunkIndex = i / chunkSize;
-                console.error(`Spotify API Error adding tracks (${url} - chunk ${chunkIndex}):`, errorData);
-                throw new Error(`Failed to add tracks (chunk ${chunkIndex}, status ${res.status}): ${errorData.error?.message || res.statusText}`);
-            }
-            // Store the snapshot_id from the last successful request
-            const data = await res.json();
-            snapshotId = data.snapshot_id;
-        }
-        // Return the final snapshot ID after all chunks succeeded
-        return { snapshot_id: snapshotId };
-    } catch (error) {
-        console.error("Error during addTracksToPlaylist loop:", error);
-        // Don't re-wrap if it's already the error we threw
-        if (error.message.startsWith("Failed to add tracks")) throw error;
-        throw new Error(`Network error adding tracks to playlist: ${error.message}`);
-    }
+    // Backend converts IDs to URIs and handles chunking
+    return fetchFromBackend(`/api/spotify/playlists/${playlistId}/tracks`, {
+        method: 'POST',
+        body: JSON.stringify({ trackIds: trackIds }),
+    });
 };
 
 /**
- * Removes specified tracks (all occurrences) from a specific playlist.
- * Handles chunking for large numbers of tracks to remove.
- * @param {string} token - The Spotify access token.
- * @param {string} playlistId - The ID of the playlist to modify.
- * @param {Array<{uri: string}>} tracksToRemove - An array of objects, each containing the 'uri' of the track to remove. Max 100 per request.
- * @returns {Promise<{snapshot_id: string|null}>} A promise resolving to an object containing the final snapshot ID of the playlist, or null if no tracks were removed.
- * @throws {Error} If the API request fails.
+ * Removes tracks from a playlist via the backend proxy.
+ * @param {string} playlistId - The ID of the playlist.
+ * @param {Array<{uri: string}>} tracksToRemove - Array of objects containing track URIs.
+ * @returns {Promise<object>} Response from the backend (e.g., { snapshot_id }).
+ * @throws {Error} If the backend request fails.
  */
-export const removeTracksFromPlaylist = async (token, playlistId, tracksToRemove) => {
-    if (!playlistId) throw new Error("Playlist ID must be provided to remove tracks.");
+export const removeTracksFromPlaylist = async (playlistId, tracksToRemove) => {
+     if (!playlistId) throw new Error("Playlist ID must be provided.");
     if (!Array.isArray(tracksToRemove) || tracksToRemove.length === 0) {
         console.warn("No tracks specified for removal.");
-        return { snapshot_id: null }; // Indicate no operation needed
+        return { snapshot_id: null };
     }
-
-    const url = `${BASE_URL}/playlists/${playlistId}/tracks`;
-    const chunkSize = 100; // Spotify API limit
-    let snapshotId = null;
-
-    try {
-        for (let i = 0; i < tracksToRemove.length; i += chunkSize) {
-            const chunk = tracksToRemove.slice(i, i + chunkSize);
-            const res = await fetch(url, {
-                method: 'DELETE', // Use DELETE method
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                // Body format for removing specific tracks by URI
-                body: JSON.stringify({ tracks: chunk }),
-            });
-
-            if (!res.ok) {
-                let errorData = {};
-                try { errorData = await res.json(); } catch (e) {}
-                const chunkIndex = i / chunkSize;
-                console.error(`Spotify API Error removing tracks (${url} - chunk ${chunkIndex}):`, errorData);
-                throw new Error(`Failed to remove tracks (chunk ${chunkIndex}, status ${res.status}): ${errorData.error?.message || res.statusText}`);
-            }
-            const data = await res.json();
-            snapshotId = data.snapshot_id; // Update with the latest snapshot ID
-        }
-        return { snapshot_id: snapshotId }; // Return the final snapshot ID
-    } catch (error) {
-        console.error("Error during removeTracksFromPlaylist loop:", error);
-        // Don't re-wrap if it's already the error we threw
-        if (error.message.startsWith("Failed to remove tracks")) throw error;
-        throw new Error(`Network error removing tracks from playlist: ${error.message}`);
-    }
+    // Backend handles chunking
+    return fetchFromBackend(`/api/spotify/playlists/${playlistId}/tracks`, {
+        method: 'DELETE',
+        body: JSON.stringify({ tracks: tracksToRemove }),
+    });
 };
 
-
 /**
- * Convenience function to get only the user ID for the current user.
- * @param {string} token - The Spotify access token.
- * @returns {Promise<string>} A promise that resolves to the user's Spotify ID.
+ * Convenience function to get only the user ID for the current user via backend.
+ * @returns {Promise<string>} The user's Spotify ID.
  * @throws {Error} If fetching the user profile fails or ID is missing.
  */
-export const getUserId = async (token) => {
-    // Reuses fetchUser and extracts the ID
-    const user = await fetchUser(token);
+export const getUserId = async () => {
+    // Reuses fetchCurrentUser and extracts the ID
+    const user = await fetchCurrentUser(); // Calls backend /api/spotify/me
     if (!user?.id) {
-        // This case might happen if the token is valid but user data is incomplete
-        console.error("User profile data fetched successfully but missing ID:", user);
-        throw new Error("Could not retrieve User ID from user profile data.");
+        throw new Error("Could not retrieve User ID from backend.");
     }
     return user.id;
+};
+
+// --- Check Authentication Status ---
+/**
+ * Checks the overall authentication status with the backend.
+ * @returns {Promise<object>} Object indicating login status for services (e.g., { spotify: true }).
+ */
+export const checkAuthStatus = async () => {
+    return fetchFromBackend('/api/auth/status');
 };

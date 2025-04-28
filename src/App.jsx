@@ -1,89 +1,78 @@
 // src/App.jsx
 import React, { useState, useEffect } from 'react';
-// Import BrowserRouter etc. FIRST if not already
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import Spotify from './components/Spotify'; // Main app component
-import LoginPage from './components/LoginPage'; // Login page component
-import { getToken, logout as performLogout } from './services/auth'; // Auth functions
-import './index.css'; // Global styles
+import Spotify from './components/Spotify'; // Main app component after login
+import LoginPage from './components/LoginPage';
+// Import the check function from the service (can be any service file now)
+import { checkAuthStatus } from './services/spotifyService'; // Or a dedicated authService.js
+import './index.css';
 
 function App() {
-  const [token, setToken] = useState(null);
+  // Tracks if the primary Spotify authentication is active
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for token on initial load OR after redirect (checks hash)
-    const fetchedToken = getToken();
-    setToken(fetchedToken);
-    setLoading(false); // Finished checking token
-    // Keep this log for debugging the token flow
-    console.log("Token fetched in App:", fetchedToken ? 'Found and set' : 'Not Found');
-  }, []); // Run only once on mount (or path change if dependencies were added)
+    console.log("App useEffect: Checking primary (Spotify) auth status with backend...");
+    checkAuthStatus() // Calls /api/auth/status on backend
+      .then(status => {
+        // Check specifically if Spotify session is active
+        if (status?.spotify) {
+          console.log("Auth status check: User IS authenticated with Spotify.");
+          setIsAuthenticated(true);
+        } else {
+          console.log("Auth status check: User is NOT authenticated with Spotify.");
+          setIsAuthenticated(false);
+        }
+      })
+      .catch(error => {
+        console.error("Auth status check failed:", error);
+        setIsAuthenticated(false);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
 
   const handleLogout = () => {
-    performLogout(); // Clears token from localStorage
-    setToken(null); // Clears token state in App
-    // Navigate('/') might be needed if logout happens outside Spotify component context
-    // but here, the route protection handles the redirect automatically.
-    console.log("Logout performed, token cleared.");
+    console.log("handleLogout called: Clearing frontend auth state.");
+    setIsAuthenticated(false);
+    // --- TODO: Call backend logout endpoint ---
+    // This backend endpoint should clear ALL service tokens from the session
+    // fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001'}/auth/logout`, {
+    //   method: 'POST',
+    //   credentials: 'include'
+    // }).catch(err => console.error("Backend logout failed:", err));
   };
 
-  // Show loading indicator while checking initial token
   if (loading) {
-    // Consider replacing with a styled spinner component for better UX
     return <div>Loading Application...</div>;
   }
 
   return (
     <BrowserRouter>
-      <div className="App"> {/* Optional: Keep a general App container */}
+      <div className="App">
         <Routes>
-          {/* Login Route */}
+          {/* Login Route - Only shows if not authenticated via Spotify */}
           <Route
             path="/login"
-            element={
-              !token ? (
-                <LoginPage />
-              ) : (
-                // If logged in, redirect /login to /
-                <Navigate to="/" replace />
-              )
-            }
+            element={!isAuthenticated ? <LoginPage /> : <Navigate to="/" replace />}
           />
-
-          {/* === Added Callback Route === */}
-          {/* Handles the redirect back from Spotify after login */}
-          <Route
-            path="/callback"
-            element={
-              // Immediately navigate to home. The useEffect hook in this App
-              // component will have already run because of the page load at /callback,
-              // processed the token from the hash, and updated the state.
-              // This navigation cleans the URL and triggers the protected home route check.
-              <Navigate to="/" replace />
-            }
-          />
-
-          {/* Protected Home/Main App Route */}
+          {/* Callback Route - Generic redirect catcher */}
+          <Route path="/callback" element={<Navigate to="/" replace />} />
+          {/* Protected Home Route - Requires Spotify authentication */}
           <Route
             path="/"
             element={
-              token ? (
-                // Render main app, passing token and logout handler
-                <Spotify token={token} onLogout={handleLogout} />
+              isAuthenticated ? (
+                <Spotify onLogout={handleLogout} />
               ) : (
-                // If not logged in, redirect / to /login
                 <Navigate to="/login" replace />
               )
             }
           />
-
-          {/* Catch-all Route */}
-          {/* Redirects any unmatched path to login or home based on token status */}
-          <Route
-            path="*"
-            element={<Navigate to={token ? "/" : "/login"} replace />}
-          />
+          {/* Catch-all */}
+          <Route path="*" element={<Navigate to={isAuthenticated ? "/" : "/login"} replace />} />
         </Routes>
       </div>
     </BrowserRouter>
