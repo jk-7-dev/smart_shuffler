@@ -2,15 +2,12 @@
 
 /**
  * Parses a CSV file expecting a 'trackId' column.
- * Assumes a simple CSV structure without complex quoting or escaped commas within fields.
+ * Handles basic CSV structure.
  * @param {File} file - The CSV file object from an input element.
- * @param {function(Array<string>, string|null)} callback - The callback function.
- * It receives two arguments:
- * - An array of extracted track IDs.
- * - An error message string if parsing fails, otherwise null.
+ * @param {function(Array<string>, string|null)} callback - Receives (ids, error).
  */
 export const parseCsvFile = (file, callback) => {
-  // Added more robust file type check
+  // File type check
   if (!file || !(file.type === 'text/csv' || file.name?.toLowerCase().endsWith('.csv'))) {
       callback([], 'Please upload a valid CSV file (.csv extension).');
       return;
@@ -21,7 +18,6 @@ export const parseCsvFile = (file, callback) => {
   reader.onload = (e) => {
     try {
       const text = e.target.result;
-      // Robust splitting: handles different line endings (\n, \r\n)
       const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line);
 
       if (lines.length < 2) {
@@ -29,23 +25,22 @@ export const parseCsvFile = (file, callback) => {
         return;
       }
 
-      // Simple comma splitting for headers, assumes no commas in headers themselves
-      // Convert headers to lowercase for case-insensitive matching
+      // Process header: lowercase, trim, remove quotes
       const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
-      const trackIdIndex = headers.indexOf('trackid'); // Check lowercase 'trackid'
+      const trackIdIndex = headers.indexOf('trackid'); // Find 'trackid' header
 
       if (trackIdIndex === -1) {
         callback([], 'CSV file (ID) must include a header row with a "trackId" column.');
         return;
       }
 
+      // Process data rows
       const ids = lines.slice(1).map(line => {
-        // Simple comma splitting for data rows.
-        // WARNING: This basic split will fail if track IDs or other columns could contain commas.
+        // WARNING: Simple split, may fail with commas in fields
         const cols = line.split(',');
-        // Ensure the column exists before trying to access/trim it
+        // Safely get data, trim, remove quotes
         return cols.length > trackIdIndex ? (cols[trackIdIndex] || '').trim().replace(/^"|"$/g, '') : null;
-      }).filter(id => id); // Filter out empty/null IDs
+      }).filter(id => id); // Filter out empty IDs
 
       callback(ids, null); // Success
     } catch (error) {
@@ -59,16 +54,16 @@ export const parseCsvFile = (file, callback) => {
       callback([], `Error reading file: ${reader.error?.message || 'Unknown file read error'}`);
   }
 
-  reader.readAsText(file);
+  reader.readAsText(file); // Use default encoding, or specify if needed e.g., reader.readAsText(file, 'UTF-8');
 };
 
 
 /**
- * Parses a CSV file expecting metadata columns like 'song_title', 'song_singer', 'movie'.
- * Handles basic CSV structure; may struggle with commas within quoted fields.
+ * Parses a CSV file expecting at least a 'song_title' column (or similar variations).
+ * Extracts ONLY the title for searching.
  * @param {File} file - The CSV file object.
  * @param {function(Array<object>, string|null)} callback - Receives (trackMetadataArray, error).
- * Each object in array: { title, artist, album }
+ * Each object in array: { title: string }
  */
 export const parseMetadataCsv = (file, callback) => {
     if (!file || !(file.type === 'text/csv' || file.name?.toLowerCase().endsWith('.csv'))) {
@@ -88,31 +83,23 @@ export const parseMetadataCsv = (file, callback) => {
                 return;
             }
 
-            // Process header row - handle potential quotes and convert to lowercase
+            // Process header: lowercase, trim, remove quotes
             const headerLine = lines[0];
-            // Basic CSV header split (doesn't handle quoted commas well)
             const headers = headerLine.split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
 
-            // Find indices of required/optional columns (adjust names based on common variations)
+            // Find index of the title column (accepting common variations)
             const titleIndex = headers.findIndex(h => ['song_title', 'track', 'title', 'name', 'song'].includes(h));
-            const artistIndex = headers.findIndex(h => ['song_singer', 'artist', 'artists', 'singer'].includes(h));
-            const albumIndex = headers.findIndex(h => ['movie', 'album', 'albumtitle'].includes(h));
 
             // Check if essential 'title' column is present
             if (titleIndex === -1) {
                 callback([], 'Metadata CSV header must contain a column for the song title (e.g., "song_title", "track", "title", "name").');
                 return;
             }
-            // Warn if optional columns are missing
-            if (artistIndex === -1) {
-                 console.warn('Metadata CSV missing an artist column (e.g., "song_singer", "artist"), search results may be less accurate.');
-            }
-             if (albumIndex === -1) {
-                 console.warn('Metadata CSV missing an album column (e.g., "movie", "album"), search results may be less accurate.');
-            }
+            // No need to check for artist/album anymore
 
+            // Process data rows
             const trackMetadataArray = lines.slice(1).map((line, index) => {
-                // Basic CSV data split (doesn't handle quoted commas well)
+                // WARNING: Simple split, may fail with commas in fields
                 const cols = line.split(',');
 
                 // Helper to safely get and clean column data
@@ -121,21 +108,20 @@ export const parseMetadataCsv = (file, callback) => {
                 };
 
                 const title = getColData(titleIndex);
-                // Use first listed artist if multiple are semicolon/comma-separated within the field
-                const artist = getColData(artistIndex).split(/[,;]/)[0].trim(); // Take first artist before comma/semicolon
-                const album = getColData(albumIndex);
 
+                // Skip row if title is missing
                 if (!title) {
                     console.warn(`Skipping row ${index + 2}: Missing song title.`);
-                    return null; // Skip row if title is missing
+                    return null;
                 }
 
-                // Return object with extracted metadata, ready for search
-                return { title, artist, album };
+                // --- UPDATED: Return object containing ONLY the title ---
+                return { title };
+                // ------------------------------------------------------
             }).filter(data => data !== null); // Filter out skipped rows
 
             if (trackMetadataArray.length === 0) {
-                 callback([], 'No valid track metadata found in the CSV.');
+                 callback([], 'No valid track titles found in the CSV.');
                  return;
             }
 
@@ -152,7 +138,7 @@ export const parseMetadataCsv = (file, callback) => {
         callback([], `Error reading file: ${reader.error?.message || 'Unknown file read error'}`);
     };
 
-    reader.readAsText(file);
+    reader.readAsText(file); // Use default encoding
 };
 
 
@@ -160,19 +146,14 @@ export const parseMetadataCsv = (file, callback) => {
 
 /**
  * Helper function to escape a field for CSV format according to RFC 4180 rules.
- * - Encloses fields containing commas, double quotes, or newlines in double quotes.
- * - Escapes existing double quotes within the field by doubling them ("").
  * @param {*} field - The value to escape. Converts null/undefined to empty string.
  * @returns {string} The CSV-safe field string.
  */
 const escapeCsvField = (field) => {
-  const stringField = String(field ?? ''); // Ensure it's a string, handle null/undefined
-  // Check if quoting is necessary
+  const stringField = String(field ?? '');
   if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n') || stringField.includes('\r')) {
-    // Enclose in double quotes and double up internal double quotes
     return `"${stringField.replace(/"/g, '""')}"`;
   }
-  // No quoting needed
   return stringField;
 };
 
@@ -192,46 +173,31 @@ export const exportTracksToCsv = (trackItems, playlistName) => {
     return;
   }
 
-  // Define CSV Headers (ensure order matches rows below)
   const headers = [
-    "Track Name",
-    "Artists",
-    "Album",
-    "Duration (ms)",
-    "Spotify ID"
-  ].map(escapeCsvField); // Escape headers too
+    "Track Name", "Artists", "Album", "Duration (ms)", "Spotify ID"
+  ].map(escapeCsvField);
 
-  // Map track items to CSV data rows
   const rows = trackItems.map(item => {
-    if (!item?.track) return null; // Skip if track data is missing
-
+    if (!item?.track) return null;
     const track = item.track;
     const trackName = track.name ?? '';
-    // Join multiple artists with a semicolon
     const artists = track.artists?.map(artist => artist.name).join('; ') ?? '';
     const albumName = track.album?.name ?? '';
     const duration = track.duration_ms ?? '';
     const spotifyId = track.id ?? '';
-
-    // Return array of fields, escaping each
     return [
-      escapeCsvField(trackName),
-      escapeCsvField(artists),
-      escapeCsvField(albumName),
-      escapeCsvField(duration),
-      escapeCsvField(spotifyId)
+      escapeCsvField(trackName), escapeCsvField(artists), escapeCsvField(albumName),
+      escapeCsvField(duration), escapeCsvField(spotifyId)
     ];
-  }).filter(row => row !== null); // Filter out skipped rows
+  }).filter(row => row !== null);
 
-  // Combine header and rows
   const csvString = [
     headers.join(','),
-    ...rows.map(row => row.join(',')) // Join fields in each data row
-  ].join('\n'); // Join all rows with newline
+    ...rows.map(row => row.join(','))
+  ].join('\n');
 
-  // --- Trigger Download ---
   try {
-    const BOM = "\uFEFF"; // UTF-8 Byte Order Mark for Excel compatibility
+    const BOM = "\uFEFF"; // UTF-8 BOM
     const blob = new Blob([BOM + csvString], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);

@@ -1,10 +1,11 @@
 // src/services/spotifyService.js (Frontend Version)
+// This version makes direct calls to the Spotify API from the frontend,
+// expecting an access token obtained via Implicit Grant or similar client-side flow.
 
 /**
  * The base URL for the Spotify Web API.
  */
-// Correct Spotify API Base URL
-const BASE_URL = 'https://api.spotify.com/v1';
+const BASE_URL = 'https://api.spotify.com/v1'; // Correct Spotify API Base URL
 
 // --- Helper for paginated requests ---
 /**
@@ -15,27 +16,43 @@ const BASE_URL = 'https://api.spotify.com/v1';
  * @throws {Error} If any API request fails.
  */
 const fetchPaginated = async (token, url) => {
+    // Check if token is provided
+    if (!token) throw new Error("Token is required for paginated fetch.");
     let items = [];
     let nextUrl = url;
     try {
         while (nextUrl) {
+            console.debug(`Fetching paginated data from: ${nextUrl}`); // Debug log
+            // Make the fetch request with the Authorization header
             const res = await fetch(nextUrl, {
                 headers: { Authorization: `Bearer ${token}` },
             });
+            // Check if the response was successful
             if (!res.ok) {
                 let errorData = {};
-                try { errorData = await res.json(); } catch (e) {}
+                try {
+                    // Try to parse error details from Spotify's JSON response
+                    errorData = await res.json();
+                } catch (e) {
+                    // Ignore if response is not JSON
+                    console.warn("Could not parse error response as JSON during pagination.");
+                }
                 console.error(`Spotify API Error during pagination (${nextUrl}):`, res.status, errorData);
+                // Throw a detailed error
                 throw new Error(`API request failed (${res.status}): ${errorData.error?.message || res.statusText || 'Unknown error'}`);
             }
+            // Parse the successful JSON response
             const data = await res.json();
+            // Concatenate items from the current page
             items = items.concat(data.items || []);
+            // Get the URL for the next page, if it exists
             nextUrl = data.next;
         }
-        return items;
+        console.debug(`Paginated fetch complete. Total items: ${items.length}`); // Debug log
+        return items; // Return all collected items
     } catch (error) {
         console.error("Error during paginated fetch processing:", error);
-        throw error;
+        throw error; // Re-throw the error for the caller to handle
     }
 };
 
@@ -44,25 +61,23 @@ const fetchPaginated = async (token, url) => {
 /**
  * Fetches the profile information for the current user.
  * @param {string} token - The Spotify access token.
- * @returns {Promise<object>} A promise that resolves to the user profile object.
- * @throws {Error} If the API request fails.
+ * @returns {Promise<object>} User profile object.
+ * @throws {Error} If token is missing or API request fails.
  */
 export const fetchUser = async (token) => {
-    if (!token) throw new Error("Token is required for fetchUser."); // Added token check
+    if (!token) throw new Error("Token is required for fetchUser.");
     const url = `${BASE_URL}/me`;
     try {
-        const res = await fetch(url, {
-            headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
         if (!res.ok) {
-            let errorData = {};
-            try { errorData = await res.json(); } catch (e) {}
+            let errorData = {}; try { errorData = await res.json(); } catch (e) {}
             console.error(`Spotify API Error (${url}):`, errorData);
             throw new Error(`Failed to fetch user profile (${res.status}): ${errorData.error?.message || res.statusText}`);
         }
         return await res.json();
     } catch (error) {
         console.error("Network/fetch error in fetchUser:", error);
+        // Avoid re-wrapping the specific error thrown above
         if (error.message.startsWith("Failed to fetch user profile")) throw error;
         throw new Error(`Network error fetching user profile: ${error.message}`);
     }
@@ -71,12 +86,14 @@ export const fetchUser = async (token) => {
 /**
  * Fetches all playlists for the current user.
  * @param {string} token - The Spotify access token.
- * @returns {Promise<Array<object>>} A promise that resolves to an array of playlist objects.
- * @throws {Error} If the API request fails during pagination.
+ * @returns {Promise<Array<object>>} Array of playlist objects.
+ * @throws {Error} If token is missing or API request fails.
  */
 export const fetchPlaylists = async (token) => {
-    if (!token) throw new Error("Token is required for fetchPlaylists."); // Added token check
+    if (!token) throw new Error("Token is required for fetchPlaylists.");
+    // Start fetching with a limit (e.g., 50 playlists per page)
     const initialUrl = `${BASE_URL}/me/playlists?limit=50`;
+    // Use the helper function to handle pagination automatically
     return fetchPaginated(token, initialUrl);
 };
 
@@ -84,15 +101,17 @@ export const fetchPlaylists = async (token) => {
  * Fetches all tracks for a specific playlist.
  * @param {string} token - The Spotify access token.
  * @param {string} playlistId - The ID of the playlist.
- * @returns {Promise<Array<object>>} A promise that resolves to an array of playlist track objects.
- * @throws {Error} If the API request fails during pagination.
+ * @returns {Promise<Array<object>>} Array of playlist track objects.
+ * @throws {Error} If token/playlistId is missing or API request fails.
  */
 export const fetchPlaylistTracks = async (token, playlistId) => {
-    if (!token) throw new Error("Token is required for fetchPlaylistTracks."); // Added token check
+    if (!token) throw new Error("Token is required for fetchPlaylistTracks.");
     if (!playlistId) throw new Error("Playlist ID must be provided to fetch tracks.");
-    // Added track URI to the fields needed for removal logic
+    // Request specific fields to minimize data, including 'uri' needed for removal
     const fields = 'items(track(id,uri,name,artists(name),album(name),duration_ms)),next';
+    // Fetch up to 100 tracks per page
     const initialUrl = `${BASE_URL}/playlists/${playlistId}/tracks?limit=100&fields=${encodeURIComponent(fields)}`;
+    // Use the helper function to handle pagination
     return fetchPaginated(token, initialUrl);
 };
 
@@ -101,26 +120,23 @@ export const fetchPlaylistTracks = async (token, playlistId) => {
  * @param {string} token - The Spotify access token.
  * @param {string} userId - The user's Spotify ID.
  * @param {string} name - The name for the new playlist.
- * @param {string} [description=''] - Optional description for the playlist.
- * @returns {Promise<object>} A promise that resolves to the newly created playlist object.
- * @throws {Error} If the API request fails.
+ * @param {string} [description=''] - Optional description.
+ * @returns {Promise<object>} The newly created playlist object.
+ * @throws {Error} If required args are missing or API request fails.
  */
 export const createPlaylist = async (token, userId, name, description = '') => {
-     if (!token) throw new Error("Token is required for createPlaylist."); // Added token check
-     if (!userId || !name) throw new Error("User ID and Playlist Name must be provided to create a playlist.");
+     if (!token) throw new Error("Token is required for createPlaylist.");
+     if (!userId || !name) throw new Error("User ID and Playlist Name are required.");
      const url = `${BASE_URL}/users/${userId}/playlists`;
      try {
         const res = await fetch(url, {
             method: 'POST',
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            // Create a private, non-collaborative playlist
             body: JSON.stringify({ name, description, public: false, collaborative: false }),
         });
         if (!res.ok) {
-            let errorData = {};
-            try { errorData = await res.json(); } catch (e) {}
+            let errorData = {}; try { errorData = await res.json(); } catch (e) {}
             console.error(`Spotify API Error (${url}):`, errorData);
             throw new Error(`Failed to create playlist (${res.status}): ${errorData.error?.message || res.statusText}`);
         }
@@ -133,25 +149,27 @@ export const createPlaylist = async (token, userId, name, description = '') => {
 };
 
 /**
- * Adds tracks to a specified playlist. Handles chunking for large track lists.
+ * Adds tracks to a specified playlist using track IDs. Handles chunking.
  * @param {string} token - The Spotify access token.
- * @param {string} playlistId - The ID of the playlist to add tracks to.
- * @param {Array<string>} trackIds - An array of Spotify Track IDs (not URIs).
- * @returns {Promise<{snapshot_id: string|null}>} A promise resolving to an object containing the snapshot ID.
- * @throws {Error} If any chunk request fails.
+ * @param {string} playlistId - The ID of the playlist.
+ * @param {Array<string>} trackIds - Array of Spotify Track IDs.
+ * @returns {Promise<{snapshot_id: string|null}>} Object containing the snapshot ID.
+ * @throws {Error} If required args are missing or API request fails.
  */
 export const addTracksToPlaylist = async (token, playlistId, trackIds) => {
-    if (!token) throw new Error("Token is required for addTracksToPlaylist."); // Added token check
-    if (!playlistId) throw new Error("Playlist ID must be provided to add tracks.");
+    if (!token) throw new Error("Token is required for addTracksToPlaylist.");
+    if (!playlistId) throw new Error("Playlist ID is required.");
     if (!Array.isArray(trackIds) || trackIds.length === 0) {
         console.warn("No track IDs provided to addTracksToPlaylist.");
-        return { snapshot_id: null };
+        return { snapshot_id: null }; // Not an error, just nothing to do
     }
+    // Convert IDs to the required Spotify URI format
     const uris = trackIds.map(id => `spotify:track:${id}`);
     const url = `${BASE_URL}/playlists/${playlistId}/tracks`;
-    const chunkSize = 100;
+    const chunkSize = 100; // Spotify API limit for adding tracks
     let snapshotId = null;
     try {
+        // Process tracks in chunks
         for (let i = 0; i < uris.length; i += chunkSize) {
             const chunk = uris.slice(i, i + chunkSize);
             const res = await fetch(url, {
@@ -160,126 +178,119 @@ export const addTracksToPlaylist = async (token, playlistId, trackIds) => {
                 body: JSON.stringify({ uris: chunk }),
             });
             if (!res.ok) {
-                let errorData = {};
-                try { errorData = await res.json(); } catch (e) {}
+                let errorData = {}; try { errorData = await res.json(); } catch (e) {}
                 const chunkIndex = i / chunkSize;
-                console.error(`Spotify API Error adding tracks (${url} - chunk ${chunkIndex}):`, errorData);
+                console.error(`Spotify API Error adding tracks (chunk ${chunkIndex}):`, errorData);
                 throw new Error(`Failed to add tracks (chunk ${chunkIndex}, status ${res.status}): ${errorData.error?.message || res.statusText}`);
             }
             const data = await res.json();
-            snapshotId = data.snapshot_id;
+            snapshotId = data.snapshot_id; // Store the latest snapshot ID
         }
-        return { snapshot_id: snapshotId };
+        return { snapshot_id: snapshotId }; // Return the final snapshot ID
     } catch (error) {
         console.error("Error during addTracksToPlaylist loop:", error);
         if (error.message.startsWith("Failed to add tracks")) throw error;
-        throw new Error(`Network error adding tracks to playlist: ${error.message}`);
+        throw new Error(`Network error adding tracks: ${error.message}`);
     }
 };
 
 /**
- * Removes specified tracks (all occurrences) from a specific playlist.
+ * Removes specified tracks (all occurrences) from a playlist using track URIs. Handles chunking.
  * @param {string} token - The Spotify access token.
- * @param {string} playlistId - The ID of the playlist to modify.
- * @param {Array<{uri: string}>} tracksToRemove - An array of objects, each containing the 'uri' of the track to remove.
- * @returns {Promise<{snapshot_id: string|null}>} A promise resolving to an object containing the final snapshot ID.
- * @throws {Error} If the API request fails.
+ * @param {string} playlistId - The ID of the playlist.
+ * @param {Array<{uri: string}>} tracksToRemove - Array of objects containing track URIs.
+ * @returns {Promise<{snapshot_id: string|null}>} Object containing the snapshot ID.
+ * @throws {Error} If required args are missing or API request fails.
  */
 export const removeTracksFromPlaylist = async (token, playlistId, tracksToRemove) => {
-    if (!token) throw new Error("Token is required for removeTracksFromPlaylist."); // Added token check
-    if (!playlistId) throw new Error("Playlist ID must be provided to remove tracks.");
+    if (!token) throw new Error("Token is required for removeTracksFromPlaylist.");
+    if (!playlistId) throw new Error("Playlist ID is required.");
     if (!Array.isArray(tracksToRemove) || tracksToRemove.length === 0) {
         console.warn("No tracks specified for removal.");
         return { snapshot_id: null };
     }
     const url = `${BASE_URL}/playlists/${playlistId}/tracks`;
-    const chunkSize = 100;
+    const chunkSize = 100; // Spotify API limit for removing tracks
     let snapshotId = null;
     try {
+        // Process tracks in chunks
         for (let i = 0; i < tracksToRemove.length; i += chunkSize) {
             const chunk = tracksToRemove.slice(i, i + chunkSize);
             const res = await fetch(url, {
                 method: 'DELETE',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                // API expects payload format: { tracks: [{uri: "..."}, ...] }
                 body: JSON.stringify({ tracks: chunk }),
             });
             if (!res.ok) {
-                let errorData = {};
-                try { errorData = await res.json(); } catch (e) {}
+                let errorData = {}; try { errorData = await res.json(); } catch (e) {}
                 const chunkIndex = i / chunkSize;
-                console.error(`Spotify API Error removing tracks (${url} - chunk ${chunkIndex}):`, errorData);
+                console.error(`Spotify API Error removing tracks (chunk ${chunkIndex}):`, errorData);
                 throw new Error(`Failed to remove tracks (chunk ${chunkIndex}, status ${res.status}): ${errorData.error?.message || res.statusText}`);
             }
             const data = await res.json();
-            snapshotId = data.snapshot_id;
+            snapshotId = data.snapshot_id; // Store the latest snapshot ID
         }
-        return { snapshot_id: snapshotId };
+        return { snapshot_id: snapshotId }; // Return the final snapshot ID
     } catch (error) {
         console.error("Error during removeTracksFromPlaylist loop:", error);
         if (error.message.startsWith("Failed to remove tracks")) throw error;
-        throw new Error(`Network error removing tracks from playlist: ${error.message}`);
+        throw new Error(`Network error removing tracks: ${error.message}`);
     }
 };
 
 /**
- * Convenience function to get only the user ID for the current user.
+ * Gets the user ID for the current user.
  * @param {string} token - The Spotify access token.
- * @returns {Promise<string>} A promise that resolves to the user's Spotify ID.
- * @throws {Error} If fetching the user profile fails or ID is missing.
+ * @returns {Promise<string>} The user's Spotify ID.
+ * @throws {Error} If token is missing or fetching user profile fails.
  */
 export const getUserId = async (token) => {
-    // Reuses fetchUser and extracts the ID
-    const user = await fetchUser(token); // Pass token
+    const user = await fetchUser(token); // Reuses fetchUser
     if (!user?.id) {
-        console.error("User profile data fetched successfully but missing ID:", user);
+        console.error("User profile data fetched but missing ID:", user);
         throw new Error("Could not retrieve User ID from user profile data.");
     }
     return user.id;
 };
 
 /**
- * Searches for a track on Spotify using metadata.
- * Prioritizes finding an exact match using field filters.
+ * Searches for a track on Spotify using ONLY the title.
  * @param {string} token - Spotify access token.
- * @param {object} metadata - Object containing { title, artist, album }. Artist/Album are optional.
+ * @param {object} metadata - Object containing { title }. Other fields ignored.
  * @param {number} [limit=1] - Max number of results to return (default 1).
- * @returns {Promise<object|null>} The first matching track object from Spotify API, or null if no match found.
- * @throws {Error} If the API request fails.
+ * @returns {Promise<object|null>} The first matching track object, or null if no match.
+ * @throws {Error} If required args are missing or API request fails.
  */
 export const searchSpotifyTrack = async (token, metadata, limit = 1) => {
-    if (!token) throw new Error("Authentication token is required for search.");
-    if (!metadata || !metadata.title) throw new Error("Track title is required for search.");
+    if (!token) throw new Error("Token is required for search.");
+    if (!metadata?.title) throw new Error("Track title is required for search.");
 
-    const { title, artist, album } = metadata;
-    let queryParts = [];
-    if (title) queryParts.push(`track:"${title.replace(/"/g, '')}"`);
-    if (artist) queryParts.push(`artist:"${artist.replace(/"/g, '')}"`);
-    if (album) queryParts.push(`album:"${album.replace(/"/g, '')}"`);
+    const { title } = metadata;
+    // Construct query using only track field filter, removing internal quotes
+    const query = `track:"${title.replace(/"/g, '')}"`;
+    const type = 'track'; // Search only for tracks
 
-    const query = queryParts.join(' ');
-    const type = 'track';
-
+    // Build URL parameters
     const params = new URLSearchParams({ q: query, type: type, limit: limit });
     const url = `${BASE_URL}/search?${params.toString()}`;
-    console.log(`Searching Spotify: ${query}`);
+    console.log(`Searching Spotify (Title Only): ${query}`);
 
     try {
-        const response = await fetch(url, {
-            headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
         if (!response.ok) {
-            let errorData = {};
-            try { errorData = await response.json(); } catch (e) {}
+            let errorData = {}; try { errorData = await response.json(); } catch (e) {}
             console.error(`Spotify Search API Error (${url}):`, errorData);
             throw new Error(`Search request failed (${response.status}): ${errorData.error?.message || response.statusText}`);
         }
         const data = await response.json();
-        if (data.tracks && data.tracks.items && data.tracks.items.length > 0) {
+        // Check if the response structure is as expected and items exist
+        if (data.tracks?.items?.length > 0) {
             console.log(`Found track: ${data.tracks.items[0].name} by ${data.tracks.items[0].artists.map(a=>a.name).join(', ')}`);
-            return data.tracks.items[0]; // Return first match
+            return data.tracks.items[0]; // Return the first (most relevant) match
         } else {
-            console.log(`No track found for query: ${query}`);
-            return null;
+            console.log(`No track found for title query: ${query}`);
+            return null; // Indicate no match found
         }
     } catch (error) {
         console.error("Network/fetch error during Spotify search:", error);
