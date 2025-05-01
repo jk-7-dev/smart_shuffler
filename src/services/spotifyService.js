@@ -1,10 +1,4 @@
-// src/services/spotifyService.js (Frontend Version)
-// This version makes direct calls to the Spotify API from the frontend,
-// expecting an access token obtained via Implicit Grant or similar client-side flow.
 
-/**
- * The base URL for the Spotify Web API.
- */
 const BASE_URL = 'https://api.spotify.com/v1'; // Correct Spotify API Base URL
 
 // --- Helper for paginated requests ---
@@ -254,6 +248,15 @@ export const getUserId = async (token) => {
     return user.id;
 };
 
+export const getCurrentUserId = async (token) => {
+    const res = await fetch('https://api.spotify.com/v1/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error("Failed to get current Spotify user ID.");
+    const data = await res.json();
+    return data.id;
+  };
+  
 /**
  * Searches for a track on Spotify using ONLY the title.
  * @param {string} token - Spotify access token.

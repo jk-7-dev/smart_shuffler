@@ -15,6 +15,7 @@ import { sendPlaylistToShuffle } from '../services/shuffleService';
 // Import utils (ensure both parsers and exporter are included)
 import { parseCsvFile, exportTracksToCsv, parseMetadataCsv } from '../utils/csvUtils';
 import './App.css'; // Ensure styles exist
+import ServicesPage from './ServicesPage';
 
 // Receive token and onLogout function as props (Frontend Auth Flow)
 function Spotify({ token, onLogout }) {
@@ -60,7 +61,7 @@ function Spotify({ token, onLogout }) {
             })
             .catch(err => {
                 console.error("Failed to fetch user info on mount:", err);
-                handleApiError(err, onLogout); // Use centralized handler
+                handleApiError(err, onLogout); // Use centralized handlerf
             });
     } else {
         console.log("No token available on mount.");
@@ -341,10 +342,11 @@ function Spotify({ token, onLogout }) {
   return (
     // Using a simplified layout for now
     <div>
-      <button onClick={onLogout} style={{ position: 'absolute', top: '10px', right: '10px' }}>Logout</button>
+      <ServicesPage onLogout={onLogout} />
       <h1>Smart Shuffler</h1>
 
-      {/* Fetch Playlists Section */}
+      {/* Google OAuth 2.0 Testing Notice */}
+      <p style={{ color: 'red', fontSize: '0.9em' }}></p>
       <div>
         <button onClick={() => handleFetchPlaylists()} disabled={isLoadingPlaylists}>
             {isLoadingPlaylists ? 'Loading...' : 'Fetch My Playlists'}
