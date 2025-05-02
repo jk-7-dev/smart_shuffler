@@ -1,155 +1,62 @@
 /* src/components/App.css */
-body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: #f7f7f7;
-    margin: 0;
-    padding: 20px;
-    color: #333;
-  }
-  
-  h1 {
-    text-align: center;
-    color: #1DB954; /* Spotify green */
-    margin-bottom: 30px;
-  }
-  
-  button {
-    background-color: #1DB954;
-    color: white;
-    border: none;
-    padding: 10px 16px;
-    margin: 5px; /* Slightly increased margin */
-    border-radius: 20px; /* More rounded */
-    cursor: pointer;
-    font-weight: 600;
-    transition: background-color 0.3s ease, transform 0.1s ease; /* Added transform transition */
-  }
-  
-  button:hover {
-    background-color: #1ed760; /* Lighter green on hover */
-    transform: scale(1.03); /* Slight scale effect */
-  }
-  
-  button:disabled {
-      background-color: #cccccc;
-      color: #666666;
-      cursor: not-allowed;
-  }
-  
-  button:disabled:hover {
-      background-color: #cccccc;
-      transform: none; /* Disable hover effect for disabled buttons */
-  }
-  
-  
-  input[type="text"],
-  input[type="file"] {
-    padding: 10px; /* Increased padding */
-    margin: 5px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    margin-right: 10px; /* Space between input and button */
-  }
-  
-  ul {
-    list-style-type: none;
-    padding: 0;
-  }
-  
-  li {
-    background: white;
-    margin: 10px 0; /* Increased margin */
-    padding: 15px; /* Increased padding */
-    border-radius: 8px; /* Slightly more rounded */
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Slightly stronger shadow */
-    display: flex; /* Use flexbox for layout */
-    justify-content: space-between; /* Space out content and buttons */
-    align-items: center; /* Vertically align items */
-  }
-  
-  li p {
-    margin: 4px 0;
-  }
-  
-  /* Style for the text part of the list item */
-  li > span {
-      flex-grow: 1; /* Allow text to take available space */
-      margin-right: 10px; /* Space before buttons */
-  }
-  
-  /* Container for buttons within list items */
-  li > div {
-      white-space: nowrap; /* Prevent buttons wrapping */
-  }
-  
-  h2 {
-    color: #333;
-    margin-top: 40px;
-    border-bottom: 2px solid #1DB954; /* Use Spotify green for border */
-    padding-bottom: 8px; /* Increased padding */
-    margin-bottom: 20px; /* Space below header */
-  }
-  
-  /* General div styling, applies to sections */
-  div > div {
-      background-color: #fff; /* White background for sections */
-      padding: 20px;
-      margin-bottom: 20px;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  }
-  
-  
-  /* Main container adjustments */
-  div {
-    max-width: 800px;
-    margin: 20px auto; /* Add top/bottom margin */
-    padding: 0 15px; /* Add horizontal padding */
-  }
-  
-  /* Login link styling */
-  a {
-      display: inline-block; /* Allow padding/margin */
-      background-color: #1DB954;
-      color: white;
-      padding: 12px 20px;
-      text-decoration: none;
-      border-radius: 20px;
-      font-weight: 600;
-      transition: background-color 0.3s ease, transform 0.1s ease;
-      text-align: center;
-      margin: 20px auto; /* Center link if it's the only element */
-  }
-  
-  a:hover {
-      background-color: #1ed760;
-      transform: scale(1.03);
-  }
 
-  .services-container {
-    text-align: center;
-    padding: 20px;
-  }
-  
-  .service-button {
-    display: inline-block;
-    margin: 10px;
-    padding: 12px 25px;
-    background-color: #1DB954;
-    color: white;
-    text-decoration: none;
-    border-radius: 50px;
-    font-size: 1.1em;
-    font-weight: bold;
-    cursor: pointer;
-  }
-  
-  .logout-button {
-    margin-top: 20px;
-    padding: 10px 20px;
-    background-color: #ff4d4d;
-    color: white;
-    border: none;
-    border-radius: 50px;
-    cursor: pointer;
-  }
+/* Keep base body styles if needed, but Layout.css handles main theme */
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  margin: 0;
+  /* Background and color are now handled by Layout.css */
+}
+
+/* General styles that might still be needed if not overridden by Layout.css */
+/* Most specific styles (buttons, inputs, lists, sections) are now in Layout.css */
+/* You might keep some very specific component styles here if necessary */
+
+/* Styles for components NOT within the main layout might go here, */
+/* but LoginPage has its own CSS */
+
+/* Remove styles that are now defined in Layout.css or Sidebar.css */
+/* e.g., remove general h1, h2, button, input, ul, li, div>div, a styles */
+/* unless they need specific overrides NOT covered by Layout.css */
+
+/* Retain styles specific to elements ONLY in Spotify.jsx or ServicesPage.jsx */
+/* if they aren't covered by the general rules in Layout.css */
+
+/* Example: If .playlist-list needs unique styling beyond general li */
+.playlist-list li > span {
+    flex-grow: 1;
+    margin-right: 15px;
+    overflow: hidden; /* Prevent long names breaking layout */
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Container for buttons within list items */
+.playlist-actions {
+    white-space: nowrap; /* Prevent buttons wrapping */
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
+/* Styles for track details if different from general li */
+.track-details ul li {
+    flex-direction: column; /* Stack track info vertically */
+    align-items: flex-start;
+    background-color: #3a3a3a; /* Slightly different bg for track items */
+    border-color: #555;
+}
+
+.track-details li p {
+    margin: 4px 0;
+}
+
+/* .services-container styles might be adjusted or moved to Layout.css */
+/* If ServicesPage has unique layout needs */
+.services-container {
+  text-align: left; /* Align content left now */
+  padding: 0; /* Padding handled by main-content */
+}
+
+/* Service buttons are styled by Layout.css now */
+/* .service-button { ... remove ... } */
+
+/* Logout button styled by Layout.css or Sidebar.css */
+/* .logout-button { ... remove ... } */
