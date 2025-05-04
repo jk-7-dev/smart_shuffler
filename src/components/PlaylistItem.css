@@ -1,0 +1,139 @@
+/* src/components/PlaylistItem.css */
+.playlist-item {
+    background-color: #282828;
+    margin-bottom: 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    position: relative; /* For absolute positioning inside if needed */
+    border: 1px solid transparent; /* Base border */
+  }
+  
+  .playlist-item:hover {
+    background-color: #3a3a3a;
+  }
+  
+  /* Style when its tracks are active in the side panel */
+  .playlist-item.tracks-active {
+      border-left: 4px solid #1DB954; /* Highlight on the left */
+      background-color: #333; /* Slightly different background */
+  }
+  
+  /* Style when an action is running on THIS item */
+  .playlist-item.busy {
+      opacity: 0.7;
+      cursor: wait; /* Indicate busy state */
+      border-color: orange; /* Example: orange border when busy */
+  }
+  /* Style when an action runs on ANOTHER item */
+  .playlist-item.disabled-externally {
+      opacity: 0.6;
+      cursor: not-allowed; /* Prevent interaction */
+  }
+  
+  
+  .playlist-info {
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 500;
+  }
+  
+  .playlist-name {
+    flex-grow: 1;
+    margin-right: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .playlist-track-count {
+    color: #b3b3b3;
+    font-size: 0.9em;
+    margin-right: 10px;
+    flex-shrink: 0; /* Prevent shrinking */
+  }
+  
+  .status-indicator {
+      font-size: 0.8em;
+      padding: 3px 8px;
+      border-radius: 10px;
+      margin-right: 10px;
+      font-weight: bold;
+      flex-shrink: 0;
+  }
+  .status-indicator.viewing {
+      background-color: #1DB954;
+      color: white;
+  }
+  .status-indicator.busy {
+      background-color: orange;
+      color: black;
+  }
+  
+  .dropdown-indicator {
+    font-size: 0.8em;
+    color: #b3b3b3;
+    flex-shrink: 0;
+  }
+  
+  .playlist-dropdown {
+    background-color: #3a3a3a; /* Slightly darker dropdown */
+    padding: 10px 15px 15px 15px;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+    border-top: 1px solid #535353; /* Separator line */
+    display: flex;
+    flex-direction: column; /* Stack buttons */
+    gap: 8px; /* Space between buttons/elements */
+  }
+  
+  .playlist-dropdown .action-button {
+      width: 100%; /* Make buttons fill width */
+      padding: 8px 15px;
+      font-size: 0.9em;
+      text-align: left; /* Align text left */
+      background-color: #535353; /* Button background */
+  }
+  .playlist-dropdown .action-button:hover {
+      background-color: #646464;
+  }
+  .playlist-dropdown .action-button:disabled {
+       background-color: #404040;
+       color: #888;
+  }
+  
+  .mood-selector {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #535353;
+  }
+  .mood-selector label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 0.9em;
+      color: #b3b3b3;
+  }
+  
+  .mood-selector select {
+      width: 100%;
+      margin-bottom: 10px;
+  }
+  .mood-confirm-buttons {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end; /* Align buttons right */
+  }
+  
+  .mood-confirm-buttons .confirm-button,
+  .mood-confirm-buttons .cancel-button {
+      padding: 6px 12px;
+      font-size: 0.85em;
+  }
+  .mood-confirm-buttons .cancel-button {
+      background-color: #535353;
+  }
+  .mood-confirm-buttons .cancel-button:hover {
+      background-color: #646464;
+  }

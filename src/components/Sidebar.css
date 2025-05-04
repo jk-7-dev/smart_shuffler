@@ -1,85 +1,69 @@
 /* src/components/Sidebar.css */
 .sidebar {
-    width: 240px; /* Fixed width for the sidebar */
-    background-color: #040404; /* Very dark background for sidebar */
-    padding: 25px 15px;
-    display: flex;
-    flex-direction: column; /* Stack items vertically */
-    border-right: 1px solid #282828; /* Separator line */
-    flex-shrink: 0; /* Prevent sidebar from shrinking */
-  }
-  
-  .sidebar-logo {
-    padding: 0 10px 30px 10px; /* Space below logo */
-    text-align: center; /* Center logo/title */
-  }
-  
-  .sidebar-logo h2 {
-    color: #ffffff;
-    margin: 0;
-    font-size: 1.5em;
-  }
-  
-  .sidebar-logo img {
-    max-width: 80%;
-    height: auto;
-  }
-  
-  .sidebar-nav {
-    flex-grow: 1; /* Pushes logout to the bottom */
-  }
-  
-  .sidebar-nav ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-  }
-  
-  .sidebar-nav li {
-    margin-bottom: 10px;
-  }
-  
-  .sidebar-nav .nav-link {
-    display: block;
-    padding: 12px 15px;
-    color: #b3b3b3; /* Default link color */
-    text-decoration: none;
-    border-radius: 4px;
-    font-weight: 500;
-    transition: background-color 0.2s ease, color 0.2s ease;
-  }
-  
-  .sidebar-nav .nav-link:hover {
-    color: #ffffff; /* White on hover */
-    background-color: #282828; /* Subtle background on hover */
-  }
-  
-  .sidebar-nav .nav-link.active {
-    color: #ffffff; /* White for active link */
-    background-color: #282828; /* Background for active link */
-    font-weight: bold;
-  }
-  
-  .sidebar-logout {
-    margin-top: 20px; /* Space above logout */
-    padding: 0 10px;
-  }
-  
-  .logout-button-sidebar {
-    background-color: #333; /* Darker background for logout */
-    color: #b3b3b3;
-    border: 1px solid #555;
-    padding: 10px 15px;
-    width: 100%; /* Full width */
-    border-radius: 50px;
-    cursor: pointer;
-    font-weight: bold;
-    font-size: 0.9em;
-    text-align: center;
-    transition: background-color 0.2s ease, color 0.2s ease;
-  }
-  
-  .logout-button-sidebar:hover {
-    background-color: #555;
-    color: #ffffff;
-  }
+  width: 240px; /* Fixed width */
+  background-color: #000000; /* Black sidebar */
+  padding: 20px 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh; /* Full viewport height */
+  box-sizing: border-box; /* Include padding in height */
+  position: sticky; /* Keep sidebar visible */
+  top: 0;
+}
+
+.sidebar-logo {
+  padding: 0 20px 20px 20px;
+  text-align: center; /* Center logo/title */
+}
+
+.sidebar-logo h2 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 1.5em;
+}
+
+.sidebar-nav {
+  flex-grow: 1; /* Takes up available space */
+}
+
+.sidebar-nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sidebar-nav .nav-link {
+  display: block;
+  padding: 12px 20px;
+  color: #b3b3b3; /* Default link color */
+  text-decoration: none;
+  font-weight: 500;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  border-left: 3px solid transparent; /* For active indicator */
+}
+
+.sidebar-nav .nav-link:hover {
+  color: #ffffff; /* White on hover */
+  background-color: #282828; /* Slight background on hover */
+}
+
+.sidebar-nav .nav-link.active {
+  color: #ffffff; /* White for active */
+  background-color: #282828; /* Background for active */
+  border-left-color: #1DB954; /* Green indicator */
+}
+
+.sidebar-logout {
+  padding: 20px;
+  margin-top: auto; /* Pushes logout to the bottom */
+}
+
+.logout-button-sidebar {
+  width: 100%; /* Full width button */
+  background-color: #191919; /* Darker background */
+  border: 1px solid #535353;
+}
+.logout-button-sidebar:hover {
+  background-color: #282828;
+  border-color: #b3b3b3;
+}

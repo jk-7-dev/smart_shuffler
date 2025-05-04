@@ -1,0 +1,61 @@
+/* src/components/Spotify.css */
+.spotify-page-layout {
+    display: flex;
+    height: calc(100vh - 40px); /* Full height minus main padding */
+    gap: 20px; /* Space between list and view */
+  }
+  
+  .playlist-list-section {
+    width: 40%; /* Adjust width as needed */
+    min-width: 300px;
+    display: flex;
+    flex-direction: column;
+    overflow-y: hidden; /* Prevent double scrollbar */
+    border-right: 1px solid #282828; /* Separator */
+    padding-right: 20px;
+  }
+  
+  .playlist-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #282828;
+  }
+  .playlist-header h2 {
+      margin: 0;
+  }
+  
+  
+  .playlist-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    overflow-y: auto; /* Allow playlist list to scroll */
+    flex-grow: 1;
+    /* Custom scrollbar (optional) */
+    scrollbar-width: thin;
+    scrollbar-color: #535353 #282828;
+  }
+  
+  .track-view-section {
+    flex-grow: 1; /* Takes remaining space */
+    width: 60%; /* Adjust width */
+    display: flex; /* Use flex for centering placeholder */
+    flex-direction: column;
+    overflow: hidden; /* Containing block for TrackListView */
+  }
+  
+  .track-view-placeholder {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100%;
+      text-align: center;
+      color: #535353;
+      font-size: 1.1em;
+      padding: 20px;
+      border: 2px dashed #282828;
+      border-radius: 8px;
+  }

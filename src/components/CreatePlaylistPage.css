@@ -1,0 +1,29 @@
+/* src/components/CreatePlaylistPage.css */
+.create-playlist-page {
+    max-width: 800px; /* Limit width for readability */
+    margin: 0 auto; /* Center the content */
+}
+
+.create-playlist-page h1 {
+    text-align: center;
+    margin-bottom: 30px;
+    color: #1DB954; /* Use accent color for main title */
+}
+
+/* Style the cards specifically on this page */
+.create-section {
+  /* Uses .action-card styles from Layout.css */
+  /* Add specific overrides if needed */
+}
+
+/* Style the file input label to look like a button */
+.file-input-label {
+    display: inline-block; /* Or block if you want it full width */
+    margin-right: 10px; /* Spacing next to playlist name input/button */
+    /* Inherits button styles from Layout.css */
+    position: relative;
+    overflow: hidden;
+    vertical-align: middle; /* Align with buttons/inputs */
+}
+
+/* You might need more specific styles if the default button look isn't perfect */

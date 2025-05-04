@@ -1,0 +1,78 @@
+/* src/components/ServicesPage.css */
+.services-page {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.services-page h1 {
+    text-align: center;
+    color: #1DB954;
+    margin-bottom: 20px;
+}
+
+.warning-message {
+    background-color: rgba(255, 204, 0, 0.1); /* Yellowish background */
+    border: 1px solid #ffcc00;
+    color: #ffcc00;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 25px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.service-card {
+ /* Uses .action-card styles */
+  margin-bottom: 30px;
+}
+
+.service-card h2 {
+    /* Style service titles */
+    color: #1DB954; /* Example: Use accent for service names */
+}
+
+.service-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 15px;
+    flex-wrap: wrap; /* Allow wrapping on small screens */
+}
+
+.service-button { /* For the 'Connect' links styled as buttons */
+    /* Inherits button styles from Layout.css */
+    text-decoration: none; /* Remove underline from link */
+}
+
+.connect-hint {
+    font-size: 0.9em;
+    color: #aaa;
+    margin-left: 10px;
+}
+
+.service-playlist-list {
+    list-style: none;
+    padding: 0;
+    margin-top: 15px;
+}
+
+.service-playlist-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #3a3a3a;
+}
+.service-playlist-item:last-child {
+    border-bottom: none;
+}
+
+.service-playlist-item span {
+    color: #ffffff;
+}
+
+.service-playlist-item button {
+    padding: 5px 12px; /* Smaller migrate button */
+    font-size: 0.85em;
+    flex-shrink: 0; /* Prevent button shrinking */
+}

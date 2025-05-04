@@ -1,27 +1,29 @@
 // src/components/Sidebar.jsx
 import React from 'react';
-import { NavLink } from 'react-router-dom'; // Use NavLink for active styling
-import './Sidebar.css'; // Create this new CSS file
-// You can import your actual logo here
-// import logo from '../assets/logo.png';
+import { NavLink } from 'react-router-dom';
+import './Sidebar.css'; // Ensure this CSS file exists and is styled
 
 function Sidebar({ onLogout }) {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
-        {/* <img src={logo} alt="Smart Shuffler Logo" /> */}
-        <h2>Smart Shuffler</h2> {/* Placeholder if no image */}
+        {/* Optional: Add logo */}
+        <h2>Smart Shuffler</h2>
       </div>
       <nav className="sidebar-nav">
         <ul>
           <li>
-            {/* Link to the main Spotify features page */}
-            <NavLink to="/" className={({ isActive }) => isActive ? "nav-link active" : "nav-link"}>
+            <NavLink to="/" end className={({ isActive }) => isActive ? "nav-link active" : "nav-link"}>
               My Playlists
             </NavLink>
           </li>
+          {/* New Link for Create Playlist Page */}
           <li>
-            {/* Link to the page for connecting external services */}
+            <NavLink to="/create" className={({ isActive }) => isActive ? "nav-link active" : "nav-link"}>
+              Create Playlist
+            </NavLink>
+          </li>
+          <li>
             <NavLink to="/connect" className={({ isActive }) => isActive ? "nav-link active" : "nav-link"}>
               Connect Services
             </NavLink>
