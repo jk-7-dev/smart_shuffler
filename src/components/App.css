@@ -60,3 +60,194 @@ body {
 
 /* Logout button styled by Layout.css or Sidebar.css */
 /* .logout-button { ... remove ... } */
+
+/* --- Playlist List --- */
+.playlist-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.playlist-item {
+  border: 1px solid #ccc;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  /* transition: background-color 0.2s ease-in-out; */ /* Avoid transition if active state changes background */
+  background-color: #fff; /* Default background */
+}
+
+/* Style for when an item is busy with an action */
+.playlist-item.busy {
+    opacity: 0.7;
+    pointer-events: none; /* Prevent clicks while busy */
+}
+
+/* Style for when an item is active (dropdown open or tracks showing) */
+.playlist-item.active {
+    border-color: #007bff; /* Highlight active item */
+    background-color: #f8f9fa; /* Slightly different background when active */
+}
+
+.playlist-info {
+  padding: 10px 15px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: bold;
+}
+
+.playlist-info:hover {
+    background-color: #eee;
+}
+
+.playlist-item.active .playlist-info {
+    /* Optional: different style for info when active */
+    /* background-color: #e9ecef; */
+}
+
+.dropdown-indicator {
+    font-size: 0.8em;
+    margin-left: 10px;
+}
+
+
+/* --- Dropdown --- */
+.playlist-dropdown {
+  padding: 10px 15px;
+  border-top: 1px solid #eee;
+  background-color: #f8f9fa; /* Match active background or keep distinct */
+  display: flex;
+  flex-wrap: wrap; /* Allow items to wrap */
+  gap: 8px; /* Spacing between buttons/elements */
+}
+
+.playlist-dropdown button {
+    /* Basic button styling */
+    padding: 5px 10px;
+    cursor: pointer;
+}
+
+.playlist-dropdown button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* --- Mood Selector (within dropdown) --- */
+.mood-selector {
+    margin-top: 8px; /* Space above selector */
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: #fff; /* White background to stand out slightly */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%; /* Take full width of dropdown area */
+    box-sizing: border-box;
+}
+
+.mood-selector select {
+    flex-grow: 1; /* Allow select to take available space */
+    padding: 5px;
+}
+
+/* --- Inline Track View --- */
+.inline-track-view {
+  padding: 10px 15px;
+  border-top: 1px solid #eee;
+  background-color: #f0f0f0; /* Slightly different background for tracks */
+  max-height: 300px; /* Limit height */
+  overflow-y: auto; /* Add scroll if content exceeds max height */
+}
+
+.track-view-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.track-view-header h3 {
+    margin: 0;
+    font-size: 1.1em;
+}
+
+.close-button {
+    background: none;
+    border: none;
+    font-size: 1.5em;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 5px;
+    color: #666;
+}
+.close-button:hover {
+    color: #333;
+}
+
+
+.inline-track-view ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.inline-track-view li {
+  padding: 5px 0;
+  border-bottom: 1px dotted #ccc;
+}
+.inline-track-view li:last-child {
+    border-bottom: none;
+}
+.inline-track-view li p {
+    margin: 2px 0;
+    font-size: 0.9em;
+}
+.inline-track-view li p strong {
+    font-weight: 600; /* Medium weight */
+}
+
+/* Loading indicator specifically for inline tracks */
+.inline-loading {
+    padding: 15px;
+    text-align: center;
+    color: #666;
+    font-style: italic;
+    border-top: 1px solid #eee;
+}
+
+
+/* --- General Action Cards --- */
+.action-card {
+    border: 1px solid #ddd;
+    padding: 15px;
+    margin-top: 20px;
+    border-radius: 5px;
+    background-color: #fff;
+}
+
+.action-card h2 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 1.2em;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+}
+
+.action-card input[type="text"],
+.action-card input[type="file"],
+.action-card button {
+    margin-right: 10px;
+    margin-bottom: 10px; /* Add bottom margin for spacing */
+    padding: 8px 12px;
+    vertical-align: middle;
+}
+.action-card input[type="file"] {
+    padding: 5px; /* Adjust file input padding */
+}
+
+.action-card button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
