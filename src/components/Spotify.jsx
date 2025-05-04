@@ -288,72 +288,81 @@ function Spotify({ token, onLogout }) {
     }
   };
 
-
-  // --- Other Handlers ---
   const handleShufflePlaylist = async (playlistId, playlistName) => {
     const isItemLoading = loadingPlaylistId === playlistId && (isLoadingTracks || isShuffling || isExporting || isRemovingDuplicates);
     if (!token || !currentUserId || isItemLoading) return;
 
+    const userMood = window.prompt("Enter your mood (e.g., happy, sad, chill):")?.toLowerCase();
+    if (!userMood) {
+        alert("Mood input cancelled.");
+        return;
+    }
+
+    // Capitalize the first letter of the mood to match the backend's format
+    const formattedMood = userMood.charAt(0).toUpperCase() + userMood.slice(1);
+
     setIsShuffling(true);
     setLoadingPlaylistId(playlistId);
-    let userAlerted = false; // To prevent double alerts on errors
-    console.log(`Shuffling playlist: ${playlistName} (${playlistId})`);
 
     try {
-        // 1. Fetch original tracks
         const trackItems = await fetchPlaylistTracks(token, playlistId);
-        if (!trackItems || trackItems.length === 0) {
-            alert("Cannot shuffle an empty playlist.");
-            userAlerted = true;
-            throw new Error("Empty playlist");
+        if (!trackItems || trackItems.length === 0) throw new Error("Playlist is empty.");
+
+        // Extract track IDs only
+        const trackIds = trackItems
+            .map(item => item?.track?.id)
+            .filter(id => typeof id === 'string' && id.trim() !== '');
+
+        console.log('Track IDs received:', trackIds);
+
+        if (trackIds.length === 0) throw new Error("No valid track IDs found in playlist.");
+
+        const moodSplitTracks = await sendPlaylistToShuffle(trackIds, userMood);
+        console.log('Shuffle API response:', moodSplitTracks);
+        console.log('Formatted Mood:', formattedMood);
+        console.log('Available Moods:', Object.keys(moodSplitTracks?.mood_predictions || {}));
+
+
+        if (moodSplitTracks.error) {
+            console.error('Shuffle API error:', moodSplitTracks.error);
+            alert(`Error: ${moodSplitTracks.error}`);
+            return;
         }
-        const tracksToSend = trackItems.map(item => item.track).filter(track => track?.id); // Get track objects with IDs
-         if (tracksToSend.length === 0) {
-             alert("No valid tracks found in the playlist to shuffle.");
-             userAlerted = true;
-             throw new Error("No valid tracks");
-         }
-         console.log(`Sending ${tracksToSend.length} tracks to shuffle service...`);
 
-
-        // 2. Send to backend shuffle service
-         const shuffledTracks = await sendPlaylistToShuffle(tracksToSend); // Assumes this returns shuffled track objects
-         if (!shuffledTracks || shuffledTracks.length === 0) {
-            throw new Error("Shuffle service returned no tracks.");
-         }
-        const shuffledIds = shuffledTracks.map(track => track.id).filter(id => id); // Extract IDs
-         if (shuffledIds.length === 0) {
-            throw new Error("Shuffled data is missing track IDs.");
-         }
-         console.log(`Received ${shuffledIds.length} shuffled track IDs.`);
-
-
-        // 3. Create new playlist for shuffled tracks
-        const shuffledPlaylistName = `${playlistName} - Shuffled`;
-        console.log(`Creating new playlist: ${shuffledPlaylistName}`);
-        const newPlaylist = await createPlaylist(token, currentUserId, shuffledPlaylistName, `Smart Shuffled version of ${playlistName}`);
-        if (!newPlaylist?.id) {
-            throw new Error("Failed to create the new shuffled playlist container.");
+        if (!moodSplitTracks || typeof moodSplitTracks !== 'object' || Object.keys(moodSplitTracks).length === 0) {
+            throw new Error("Shuffle service returned no mood-split tracks or invalid response.");
         }
-         console.log(`New playlist ${newPlaylist.id} created, adding shuffled tracks...`);
 
-        // 4. Add shuffled tracks to the new playlist
-        await addTracksToPlaylist(token, newPlaylist.id, shuffledIds);
+        // Access the tracks for the formatted mood
+        const moodTracks = moodSplitTracks?.mood_predictions?.[formattedMood];
 
-        alert(`Shuffled playlist "${shuffledPlaylistName}" created successfully!`);
-        userAlerted = true;
-        await handleFetchPlaylists(token); // Refresh list
+        if (!moodTracks || moodTracks.length === 0) {
+            console.error(`Mood "${formattedMood}" not found in response. Available moods:`, Object.keys(moodSplitTracks));
+            throw new Error(`No tracks found for mood: ${formattedMood}`);
+        }
 
+        // Create a new playlist for the shuffled tracks
+        const shuffledPlaylistName = `${playlistName} - ${formattedMood} Mood`;
+        console.log(`Creating shuffled playlist: ${shuffledPlaylistName}`);
+
+        const newPlaylist = await createPlaylist(token, currentUserId, shuffledPlaylistName, `Shuffled playlist based on mood: ${formattedMood}`);
+        if (!newPlaylist?.id) throw new Error("Failed to create shuffled playlist.");
+
+        console.log(`Adding tracks to shuffled playlist: ${newPlaylist.id}`);
+        const trackIdsOnly = moodTracks.map(track => track.track_id);
+        await addTracksToPlaylist(token, newPlaylist.id, trackIdsOnly);
+
+
+        alert(`Mood-based playlist "${shuffledPlaylistName}" created successfully!`);
+        await handleFetchPlaylists(token);
     } catch (error) {
-        console.error('Shuffle process error:', error);
-        if (!userAlerted) { // Only alert if no specific alert was shown before
-             handleApiError(error, onLogout); // Use standard handler
-        }
+        console.error('Shuffle error:', error);
+        handleApiError(error, onLogout);
     } finally {
         setIsShuffling(false);
         setLoadingPlaylistId(null);
     }
-  };
+};
 
   const handleExportPlaylist = async (playlistId, playlistName) => {
     const isItemLoading = loadingPlaylistId === playlistId && (isLoadingTracks || isShuffling || isExporting || isRemovingDuplicates);
