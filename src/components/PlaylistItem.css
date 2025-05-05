@@ -137,3 +137,6 @@
   .mood-confirm-buttons .cancel-button:hover {
       background-color: #646464;
   }
+  hr.dropdown-divider {
+    display: none;
+}
