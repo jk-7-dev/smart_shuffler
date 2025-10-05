@@ -4,7 +4,7 @@ import './LoginPage.css'; // Styles updated for dark theme
 
 // Constants remain the same
 const CLIENT_ID = '1d71d19478764af89e8836b6b5240bd3';
-const REDIRECT_URI = 'http://localhost:8888/callback'; // Ensure this matches Spotify Dev dashboard
+const REDIRECT_URI = 'https://smart-shuffler.vercel.app/callback'; // Ensure this matches Spotify Dev dashboard
 // Ensure AUTH_ENDPOINT points to the correct Spotify Accounts service URL
 const AUTH_ENDPOINT = 'https://accounts.spotify.com/authorize';
 const RESPONSE_TYPE = 'token';
