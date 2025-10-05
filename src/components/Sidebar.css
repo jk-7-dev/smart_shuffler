@@ -1,0 +1,69 @@
+/* src/components/Sidebar.css */
+.sidebar {
+  width: 240px; /* Fixed width */
+  background-color: #000000; /* Black sidebar */
+  padding: 20px 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh; /* Full viewport height */
+  box-sizing: border-box; /* Include padding in height */
+  position: sticky; /* Keep sidebar visible */
+  top: 0;
+}
+
+.sidebar-logo {
+  padding: 0 20px 20px 20px;
+  text-align: center; /* Center logo/title */
+}
+
+.sidebar-logo h2 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 1.5em;
+}
+
+.sidebar-nav {
+  flex-grow: 1; /* Takes up available space */
+}
+
+.sidebar-nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sidebar-nav .nav-link {
+  display: block;
+  padding: 12px 20px;
+  color: #b3b3b3; /* Default link color */
+  text-decoration: none;
+  font-weight: 500;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  border-left: 3px solid transparent; /* For active indicator */
+}
+
+.sidebar-nav .nav-link:hover {
+  color: #ffffff; /* White on hover */
+  background-color: #282828; /* Slight background on hover */
+}
+
+.sidebar-nav .nav-link.active {
+  color: #ffffff; /* White for active */
+  background-color: #282828; /* Background for active */
+  border-left-color: #1DB954; /* Green indicator */
+}
+
+.sidebar-logout {
+  padding: 20px;
+  margin-top: auto; /* Pushes logout to the bottom */
+}
+
+.logout-button-sidebar {
+  width: 100%; /* Full width button */
+  background-color: #191919; /* Darker background */
+  border: 1px solid #535353;
+}
+.logout-button-sidebar:hover {
+  background-color: #282828;
+  border-color: #b3b3b3;
+}

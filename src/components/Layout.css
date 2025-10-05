@@ -1,0 +1,108 @@
+/* src/components/Layout.css */
+body {
+  margin: 0;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  background-color: #121212; /* Dark background */
+  color: #ffffff; /* Light text */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.layout-container {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main-content {
+  flex-grow: 1;
+  padding: 20px 30px; /* Add padding */
+  overflow-y: auto; /* Allow content scrolling if needed */
+  background-color: #181818; /* Slightly lighter background for content */
+}
+
+/* General Styles */
+h1, h2, h3 {
+  color: #ffffff;
+  margin-bottom: 1rem;
+}
+
+p {
+  color: #b3b3b3; /* Lighter grey for paragraphs */
+  line-height: 1.6;
+}
+
+button, .button-link, .file-input-label {
+  background-color: #1DB954; /* Spotify Green */
+  color: #ffffff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 50px; /* Rounded buttons */
+  cursor: pointer;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  display: inline-block; /* Ensure labels behave like buttons */
+  text-align: center;
+  margin: 5px; /* Add some spacing */
+}
+
+button:hover, .button-link:hover, .file-input-label:hover {
+  background-color: #1ed760; /* Lighter green on hover */
+  transform: scale(1.02);
+}
+
+button:disabled, .button-link:disabled, .file-input-label:disabled {
+  background-color: #535353; /* Grey out disabled buttons */
+  color: #b3b3b3;
+  cursor: not-allowed;
+  transform: none;
+}
+
+button:active, .button-link:active {
+    transform: scale(0.98); /* Click feedback */
+}
+
+
+input[type="text"], input[type="file"], select {
+  background-color: #282828;
+  border: 1px solid #535353;
+  color: #ffffff;
+  padding: 10px 15px;
+  border-radius: 4px;
+  margin: 5px 0 15px 0; /* Spacing */
+  width: calc(100% - 32px); /* Full width minus padding */
+  box-sizing: border-box;
+}
+
+input[type="text"]::placeholder {
+    color: #b3b3b3;
+}
+
+.loading-message, .empty-message {
+    text-align: center;
+    color: #b3b3b3;
+    padding: 40px 20px;
+    font-style: italic;
+}
+
+.action-card {
+  background-color: #282828; /* Card background */
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 25px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.action-card h2 {
+    margin-top: 0;
+    border-bottom: 1px solid #535353;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+.description {
+    font-size: 0.9em;
+    color: #b3b3b3;
+    margin-bottom: 15px;
+}

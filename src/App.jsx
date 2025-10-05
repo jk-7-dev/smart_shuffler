@@ -1,93 +1,178 @@
 // src/App.jsx
-import React, { useState, useEffect } from 'react';
-// Import BrowserRouter etc. FIRST if not already
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import Spotify from './components/Spotify'; // Main app component
-import LoginPage from './components/LoginPage'; // Login page component
-import { getToken, logout as performLogout } from './services/auth'; // Auth functions
-import './index.css'; // Global styles
+import React, { useState, useEffect, useCallback } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import Modal from 'react-modal'; // Import react-modal
+
+// Import Components
+import LoginPage from './components/LoginPage';
+import Spotify from './components/Spotify';
+import ServicesPage from './components/ServicesPage';
+import Callback from './components/Callback';
+import Layout from './components/Layout';
+import CreatePlaylistPage from './components/CreatePlaylistPage';
+
+// Import Services / Utils
+import { getUserId } from './services/spotifyService'; // Assuming path is correct
+
+// --- IMPORTANT: Set Modal App Element ---
+// This should match the ID of your main app container in public/index.html
+// Do this ONCE, outside the component function.
+Modal.setAppElement('#root');
+// ---
 
 function App() {
-  const [token, setToken] = useState(null);
-  const [loading, setLoading] = useState(true);
+    const [token, setToken] = useState(null);
+    const [userId, setUserId] = useState(null);
+    const [isInitializing, setIsInitializing] = useState(true);
+    const [refreshKey, setRefreshKey] = useState(0);
 
-  useEffect(() => {
-    // Check for token on initial load OR after redirect (checks hash)
-    const fetchedToken = getToken();
-    setToken(fetchedToken);
-    setLoading(false); // Finished checking token
-    // Keep this log for debugging the token flow
-    console.log("Token fetched in App:", fetchedToken ? 'Found and set' : 'Not Found');
-  }, []); // Run only once on mount (or path change if dependencies were added)
+    // --- Logout Handler ---
+    const handleLogout = useCallback(() => {
+        console.log("Logging out...");
+        setToken(null);
+        setUserId(null);
+        localStorage.removeItem('spotify_access_token');
+        localStorage.removeItem('spotify_token_expires');
+        localStorage.removeItem('amazon_access_token');
+        localStorage.removeItem('youtube_access_token');
+        setIsInitializing(false);
+    }, []);
 
-  const handleLogout = () => {
-    performLogout(); // Clears token from localStorage
-    setToken(null); // Clears token state in App
-    // Navigate('/') might be needed if logout happens outside Spotify component context
-    // but here, the route protection handles the redirect automatically.
-    console.log("Logout performed, token cleared.");
-  };
+    // --- Centralized API Error Handler ---
+    const handleApiError = useCallback((error, logoutCallback) => {
+        console.error("Global API Error Handler Caught:", error);
+        const message = String(error?.message || '').toLowerCase();
 
-  // Show loading indicator while checking initial token
-  if (loading) {
-    // Consider replacing with a styled spinner component for better UX
-    return <div>Loading Application...</div>;
-  }
-
-  return (
-    <BrowserRouter>
-      <div className="App"> {/* Optional: Keep a general App container */}
-        <Routes>
-          {/* Login Route */}
-          <Route
-            path="/login"
-            element={
-              !token ? (
-                <LoginPage />
-              ) : (
-                // If logged in, redirect /login to /
-                <Navigate to="/" replace />
-              )
+        if (message.includes('401') || message.includes('403') || message.includes('token') || message.includes('unauthorized') || message.includes('invalid access token')) {
+            if (localStorage.getItem('spotify_access_token')) {
+                 alert(`Authentication error: ${error.message}.\nYour session may have expired. Logging out.`);
+                 // Ensure logoutCallback is callable before invoking
+                 if (typeof logoutCallback === 'function') {
+                     logoutCallback();
+                 } else {
+                     console.warn("logoutCallback not provided or not a function in handleApiError");
+                     // Attempt default logout if callback is missing
+                     handleLogout(); // Call handleLogout defined in App scope
+                 }
             }
-          />
+        } else {
+             alert(`An API error occurred:\n${error.message}\n\nPlease try again or check the console for details.`);
+        }
+    // Add handleLogout as a dependency since it's used via logoutCallback
+    }, [handleLogout]); // Dependency added
 
-          {/* === Added Callback Route === */}
-          {/* Handles the redirect back from Spotify after login */}
-          <Route
-            path="/callback"
-            element={
-              // Immediately navigate to home. The useEffect hook in this App
-              // component will have already run because of the page load at /callback,
-              // processed the token from the hash, and updated the state.
-              // This navigation cleans the URL and triggers the protected home route check.
-              <Navigate to="/" replace />
-            }
-          />
+    // --- Check Token on Initial Load & Expiry ---
+    useEffect(() => {
+        console.log("App initializing: Checking token...");
+        const storedToken = localStorage.getItem('spotify_access_token');
+        const expiryTime = localStorage.getItem('spotify_token_expires');
+        let validTokenFound = false;
 
-          {/* Protected Home/Main App Route */}
-          <Route
-            path="/"
-            element={
-              token ? (
-                // Render main app, passing token and logout handler
-                <Spotify token={token} onLogout={handleLogout} />
-              ) : (
-                // If not logged in, redirect / to /login
-                <Navigate to="/login" replace />
-              )
-            }
-          />
+        if (storedToken && expiryTime && Date.now() < parseInt(expiryTime, 10)) {
+            console.log("Found valid token in localStorage.");
+            setToken(storedToken);
+            validTokenFound = true;
+        } else if (storedToken) {
+            console.log("Token found but expired or expiry time missing.");
+            handleLogout();
+        } else {
+            console.log("No token found in localStorage.");
+        }
 
-          {/* Catch-all Route */}
-          {/* Redirects any unmatched path to login or home based on token status */}
-          <Route
-            path="*"
-            element={<Navigate to={token ? "/" : "/login"} replace />}
-          />
-        </Routes>
-      </div>
-    </BrowserRouter>
-  );
+        if (!validTokenFound) {
+            setIsInitializing(false);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [handleLogout]); // handleLogout is stable due to its own useCallback
+
+    // --- Fetch User ID once token is set ---
+    useEffect(() => {
+        if (token && !userId) {
+            console.log("Token set, fetching User ID...");
+            getUserId(token)
+                .then(id => {
+                    console.log("User ID fetched:", id);
+                    setUserId(id);
+                    setIsInitializing(false);
+                })
+                .catch(err => {
+                    console.error("Failed to get User ID in App:", err);
+                    handleApiError(err, handleLogout); // Pass handleLogout as the callback
+                    setIsInitializing(false);
+                });
+        } else if (!token) {
+            setUserId(null);
+            if (isInitializing) setIsInitializing(false);
+        }
+    // handleApiError and handleLogout are memoized, safe to include
+    }, [token, userId, handleApiError, handleLogout, isInitializing]);
+
+    // --- Playlist Refresh Trigger ---
+    const triggerPlaylistRefresh = useCallback(() => {
+        console.log("Triggering playlist refresh...");
+        setRefreshKey(oldKey => oldKey + 1);
+    }, []);
+
+
+    // --- Render Logic ---
+    if (isInitializing) {
+        return <div className="loading-message">Initializing Application...</div>;
+    }
+
+    return (
+        <Router>
+            <Routes>
+                {/* Public Routes */}
+                <Route path="/login" element={!token ? <LoginPage /> : <Navigate to="/" replace />} />
+                <Route path="/callback" element={<Callback />} />
+
+                {/* Protected Routes */}
+                <Route
+                    path="/"
+                    element={token ? <Layout onLogout={handleLogout} /> : <Navigate to="/login" replace />}
+                >
+                    <Route
+                        index
+                        element={
+                            <Spotify
+                                key={refreshKey} // Use key to force remount on refresh
+                                token={token}
+                                onLogout={handleLogout}
+                                // Pass central error handler if Spotify needs it directly
+                                // handleApiError={handleApiError}
+                            />
+                        }
+                     />
+                    <Route
+                        path="connect"
+                        element={
+                            <ServicesPage
+                                // Pass props if needed, e.g.:
+                                // handleApiError={handleApiError}
+                                // onLogout={handleLogout}
+                             />
+                        }
+                    />
+                    <Route
+                        path="create"
+                        element={
+                            <CreatePlaylistPage
+                                token={token}
+                                currentUserId={userId}
+                                onLogout={handleLogout}
+                                handleApiError={handleApiError} // Pass error handler
+                                refreshPlaylists={triggerPlaylistRefresh}
+                            />
+                        }
+                    />
+                    {/* Add other protected routes here */}
+                </Route>
+
+                {/* Fallback Route */}
+                <Route path="*" element={<Navigate to={token ? "/" : "/login"} replace />} />
+            </Routes>
+        </Router>
+    );
 }
 
 export default App;
