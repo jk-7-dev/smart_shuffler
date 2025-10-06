@@ -1,3 +1,5 @@
+// new commit with tags
+
 // src/App.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
