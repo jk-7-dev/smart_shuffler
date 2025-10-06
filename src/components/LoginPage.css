@@ -4,18 +4,22 @@
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background-color: #121212; /* Dark background */
+  background-image: url('/src/utils/bg.jpeg'); /* Added background image */
+  background-size: cover; /* Ensure the image covers the whole area */
+  background-position: center; /* Center the image */
+  background-repeat: no-repeat; /* Prevent the image from repeating */
 }
 
 .login-container {
-  background-color: #181818; /* Slightly lighter card background */
+  /* MODIFIED: Made background translucent using RGBA */
+  background-color: rgba(24, 24, 24, 0.85); /* Slightly lighter card background with 85% opacity */
   padding: 50px 60px;
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); /* Increased shadow intensity for better visibility */
   text-align: center;
   max-width: 450px;
   width: 90%;
-  border: 1px solid #282828;
+  border: 1px solid rgba(40, 40, 40, 0.6); /* Slightly translucent border */
 }
 
 .login-container h1 {
@@ -26,7 +30,7 @@
 
 .login-container p {
   font-size: 1.1em;
-  color: #b3b3b3; /* Lighter grey */
+  color: #e0e0e0; /* Made text slightly brighter for better contrast on translucent bg */
   margin-bottom: 40px;
 }
 

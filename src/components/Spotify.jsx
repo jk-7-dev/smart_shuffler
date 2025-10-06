@@ -1,10 +1,12 @@
 // src/components/Spotify.jsx
-import React, { useEffect, useState, useCallback } from 'react'; // Removed unused useRef
+import React, { useEffect, useState, useCallback } from 'react';
 
 // Services
 import {
     fetchPlaylists, fetchPlaylistTracks, createPlaylist, addTracksToPlaylist,
-    getUserId, removeTracksFromPlaylist
+    getUserId, removeTracksFromPlaylist,
+    fetchAvailableDevices, // <-- NEW
+    startPlaybackOnDevice  // <-- NEW
 } from '../services/spotifyService';
 import { sendPlaylistToShuffle } from '../services/shuffleService';
 import { predictMoodFromScreenshot } from '../services/moodPredictionService';
@@ -32,6 +34,8 @@ function Spotify({ token, onLogout, key: refreshKey }) {
     const [isShuffling, setIsShuffling] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
     const [isRemovingDuplicates, setIsRemovingDuplicates] = useState(false);
+    const [playingPlaylistId, setPlayingPlaylistId] = useState(null); // <-- NEW: Tracks which playlist is being targeted for play
+
 
     // --- Centralized Error Handling ---
     const handleApiError = useCallback((error, logoutCallback) => {
@@ -39,6 +43,7 @@ function Spotify({ token, onLogout, key: refreshKey }) {
         // Clear all loading states on error
         setIsLoadingPlaylists(false);
         setLoadingPlaylistIdForAction(null);
+        setPlayingPlaylistId(null); // <-- NEW
         setIsShuffling(false);
         setIsExporting(false);
         setIsRemovingDuplicates(false);
@@ -47,30 +52,33 @@ function Spotify({ token, onLogout, key: refreshKey }) {
         const message = String(error?.response?.data?.error || error?.message || '').toLowerCase();
         const status = error?.response?.status;
 
+        // Player specific error messages (e.g., from Spotify API when no active device)
+        if (message.includes("player command failed") || message.includes("restricted")) {
+            alert(`Playback Error: ${error.message}. Ensure Spotify is active on a device or check account permissions.`);
+            return; // Don't logout for player errors unless it's an auth issue
+        }
+
         if (status === 401 || status === 403 || message.includes('token') || message.includes('unauthorized') || message.includes('invalid access token')) {
             if (localStorage.getItem('spotify_access_token')) {
-                 alert(`Authentication error: ${error.message}. Session may have expired. Logging out.`);
-                 // Use the passed callback, ensure it's callable
-                 if (typeof logoutCallback === 'function') {
-                     logoutCallback();
-                 } else {
-                     console.warn("onLogout callback not available or not a function in handleApiError.");
-                     // Fallback or simply log out if needed, but ideally logoutCallback is passed reliably
-                     if (typeof onLogout === 'function') onLogout(); // Try using prop directly if logoutCallback is missing
-                 }
+                alert(`Authentication error: ${error.message}. Session may have expired. Logging out.`);
+                // Use the passed callback, ensure it's callable
+                if (typeof logoutCallback === 'function') {
+                    logoutCallback();
+                } else {
+                    console.warn("onLogout callback not available or not a function in handleApiError.");
+                    // Fallback or simply log out if needed, but ideally logoutCallback is passed reliably
+                    if (typeof onLogout === 'function') onLogout(); // Try using prop directly if logoutCallback is missing
+                }
             }
         } else {
-             if (!message.startsWith('failed to predict mood')) {
-                alert(`An error occurred: ${error.message}`);
-             }
+            if (!message.startsWith('failed to predict mood')) { // Avoid duplicate alerts for mood prediction
+                 alert(`An error occurred: ${error.message}`);
+            }
         }
-    // Add onLogout as dependency if used directly as fallback
     }, [onLogout]); // Added onLogout dependency
 
     // --- Fetch Playlists Handler ---
-    // Wrapped handleFetchPlaylists in useCallback first
     const handleFetchPlaylists = useCallback(async (currentToken = token) => {
-        // Added currentUserId check here as well for safety
         if (!currentToken || isLoadingPlaylists || !currentUserId) {
             console.log("Skipping fetch playlists:", { hasToken: !!currentToken, isLoading: isLoadingPlaylists, hasUserId: !!currentUserId });
             return;
@@ -85,12 +93,10 @@ function Spotify({ token, onLogout, key: refreshKey }) {
             setPlaylists(items);
             console.log("Playlists fetched:", items.length);
         } catch (error) {
-            // Use handleApiError defined above
             handleApiError(error, onLogout);
         } finally {
             setIsLoadingPlaylists(false);
         }
-     // Dependencies: token, isLoadingPlaylists, currentUserId, handleApiError, onLogout
     }, [token, isLoadingPlaylists, currentUserId, handleApiError, onLogout]);
 
     // --- Effect Hook ---
@@ -101,7 +107,6 @@ function Spotify({ token, onLogout, key: refreshKey }) {
                 .then(id => {
                     console.log("Spotify.jsx: User ID fetched:", id);
                     setCurrentUserId(id);
-                    // Fetch playlists *after* getting user ID using the memoized handler
                     handleFetchPlaylists(token);
                 })
                 .catch(err => {
@@ -114,10 +119,57 @@ function Spotify({ token, onLogout, key: refreshKey }) {
             setPlaylists([]);
             setViewingTracksFor(null);
             setActivePlaylistIdForMenu(null);
+            setPlayingPlaylistId(null); // Reset playing state on logout
         }
-    // Added handleFetchPlaylists and handleApiError as dependencies
     }, [token, onLogout, currentUserId, handleFetchPlaylists, handleApiError]);
 
+
+    // --- Play Playlist Handler ---
+    const handlePlayPlaylistRequest = useCallback(async (playlistId, playlistName, playlistUri) => {
+        if (!token || playingPlaylistId) return; // Prevent multiple play requests
+
+        setPlayingPlaylistId(playlistId);
+        setActivePlaylistIdForMenu(null); // Close menu
+        console.log(`Attempting to play playlist: ${playlistName} (URI: ${playlistUri})`);
+        alert(`Attempting to play "${playlistName}"...`); // Simple feedback
+
+        try {
+            const devices = await fetchAvailableDevices(token);
+            if (!devices || devices.length === 0) {
+                alert("No Spotify devices found. Please open Spotify on one of your devices and try again.");
+                setPlayingPlaylistId(null);
+                return;
+            }
+
+            // Prioritize an active device, otherwise pick the first available one.
+            let targetDevice = devices.find(d => d.is_active);
+            if (!targetDevice) {
+                targetDevice = devices[0]; // Fallback to the first device if none are explicitly active
+                console.log(`No explicitly active device. Using first available: ${targetDevice.name}`);
+            } else {
+                console.log(`Found active device: ${targetDevice.name} (ID: ${targetDevice.id})`);
+            }
+            
+            if (!targetDevice || !targetDevice.id) {
+                alert("Could not identify a suitable device to play on.");
+                setPlayingPlaylistId(null);
+                return;
+            }
+
+            await startPlaybackOnDevice(token, targetDevice.id, playlistUri);
+            alert(`Playback of "${playlistName}" started on ${targetDevice.name}.`);
+
+        } catch (error) {
+            // Specific error for when a device is found but playback is restricted (e.g. Premium required)
+             if (error.message && (error.message.toLowerCase().includes("restricted") || error.message.toLowerCase().includes("premium"))) {
+                alert(`Playback restricted: ${error.message}. This action might require a Spotify Premium account or the device might not support it.`);
+            } else {
+                handleApiError(error, onLogout); // Use central error handler
+            }
+        } finally {
+            setPlayingPlaylistId(null);
+        }
+    }, [token, playingPlaylistId, handleApiError, onLogout]);
 
     // --- Other Handlers ---
 
@@ -129,7 +181,7 @@ function Spotify({ token, onLogout, key: refreshKey }) {
         if (!token || viewingTracksFor?.isLoading || loadingPlaylistIdForAction === playlistId) return;
 
         if (viewingTracksFor?.playlistId === playlistId && !viewingTracksFor?.isLoading) {
-            handleCloseTracks(); // Uses handleCloseTracks
+            handleCloseTracks();
             return;
         }
 
@@ -146,9 +198,8 @@ function Spotify({ token, onLogout, key: refreshKey }) {
             );
         } catch (error) {
             console.error(`[Spotify.jsx] fetchPlaylistTracks FAILED for ${playlistId}:`, error);
-            handleApiError(error, onLogout); // Uses handleApiError
+            handleApiError(error, onLogout);
         }
-    // Added handleCloseTracks and handleApiError dependencies
     }, [token, viewingTracksFor, loadingPlaylistIdForAction, handleApiError, onLogout, handleCloseTracks]);
 
 
@@ -158,7 +209,7 @@ function Spotify({ token, onLogout, key: refreshKey }) {
             alert("Cannot shuffle playlist - required playlist information missing.");
             return;
         }
-        if (loadingPlaylistIdForAction || isShuffling) return;
+        if (loadingPlaylistIdForAction || isShuffling || playingPlaylistId) return; // Added playingPlaylistId check
 
         setIsShuffling(true);
         setLoadingPlaylistIdForAction(playlistId);
@@ -197,7 +248,7 @@ function Spotify({ token, onLogout, key: refreshKey }) {
             console.log(`Proceeding to shuffle playlist: ${playlistName} (${playlistId}) with mood: ${capitalizedMood}`);
 
             // Step 3: Fetch Tracks
-            const trackItems = await fetchPlaylistTracks(token, playlistId); // Uses token
+            const trackItems = await fetchPlaylistTracks(token, playlistId);
             if (!trackItems || trackItems.length === 0) throw new Error("Playlist is empty, cannot shuffle.");
             const trackIds = trackItems.map(item => item?.track?.id).filter(id => typeof id === 'string' && id.trim() !== '');
             if (trackIds.length === 0) throw new Error("No valid track IDs found in playlist.");
@@ -218,37 +269,36 @@ function Spotify({ token, onLogout, key: refreshKey }) {
 
             // Step 6: Create Playlist
             const shuffledPlaylistName = `${playlistName} - ${capitalizedMood} Mood`;
-            const newPlaylist = await createPlaylist(token, currentUserId, shuffledPlaylistName, `Shuffled "${playlistName}" based on mood: ${capitalizedMood}`); // uses token, currentUserId
+            const newPlaylist = await createPlaylist(token, currentUserId, shuffledPlaylistName, `Shuffled "${playlistName}" based on mood: ${capitalizedMood}`);
             if (!newPlaylist?.id) throw new Error("Failed to create the new shuffled playlist on Spotify.");
 
             // Step 7: Add Tracks
             const trackIdsOnly = moodTracks.map(track => track.track_id).filter(Boolean);
             if (trackIdsOnly.length === 0) throw new Error("Could not extract track IDs from shuffle service response.");
-            await addTracksToPlaylist(token, newPlaylist.id, trackIdsOnly); // uses token
+            await addTracksToPlaylist(token, newPlaylist.id, trackIdsOnly);
 
             alert(`Mood-based playlist "${shuffledPlaylistName}" created successfully with ${trackIdsOnly.length} tracks!`);
-            await handleFetchPlaylists(token); // Uses handleFetchPlaylists
+            await handleFetchPlaylists(token);
 
         } catch (error) {
             console.error(`Shuffle failed for playlist ${playlistId}:`, error);
-            handleApiError(error, onLogout); // Uses handleApiError, onLogout
+            handleApiError(error, onLogout);
         } finally {
             setIsShuffling(false);
             setLoadingPlaylistIdForAction(null);
         }
-    // Added handleFetchPlaylists dependency
-    }, [token, currentUserId, loadingPlaylistIdForAction, isShuffling, handleApiError, onLogout, handleFetchPlaylists]);
+    }, [token, currentUserId, loadingPlaylistIdForAction, isShuffling, playingPlaylistId, handleApiError, onLogout, handleFetchPlaylists]);
 
 
     const handleExportPlaylist = useCallback(async (playlistId, playlistName) => {
-        if (!token || loadingPlaylistIdForAction || isExporting) return;
+        if (!token || loadingPlaylistIdForAction || isExporting || playingPlaylistId) return; // Added playingPlaylistId check
         setIsExporting(true);
         setLoadingPlaylistIdForAction(playlistId);
         setActivePlaylistIdForMenu(null);
         setViewingTracksFor(null);
         console.log(`Exporting playlist: ${playlistName} (${playlistId})`);
         try {
-            const trackItems = await fetchPlaylistTracks(token, playlistId); // uses token
+            const trackItems = await fetchPlaylistTracks(token, playlistId);
             if (!trackItems || trackItems.length === 0) {
                 alert("Cannot export an empty playlist.");
                 setIsExporting(false); setLoadingPlaylistIdForAction(null); return;
@@ -256,16 +306,15 @@ function Spotify({ token, onLogout, key: refreshKey }) {
             console.log(`Workspaceed ${trackItems.length} tracks for export.`);
             exportTracksToCsv(trackItems, playlistName);
         } catch (error) {
-            handleApiError(error, onLogout); // uses handleApiError, onLogout
+            handleApiError(error, onLogout);
         } finally {
             setIsExporting(false); setLoadingPlaylistIdForAction(null);
         }
-     // Added handleApiError, onLogout dependencies
-    }, [token, loadingPlaylistIdForAction, isExporting, handleApiError, onLogout]);
+    }, [token, loadingPlaylistIdForAction, isExporting, playingPlaylistId, handleApiError, onLogout]);
 
 
     const handleRemoveDuplicates = useCallback(async (playlistId, playlistName) => {
-        if (!token || loadingPlaylistIdForAction || isRemovingDuplicates) return;
+        if (!token || loadingPlaylistIdForAction || isRemovingDuplicates || playingPlaylistId) return; // Added playingPlaylistId check
         const confirmation = window.confirm(`Are you sure you want to remove duplicate tracks from "${playlistName}"?`);
         if (!confirmation) return;
 
@@ -275,7 +324,7 @@ function Spotify({ token, onLogout, key: refreshKey }) {
         setViewingTracksFor(null);
         console.log(`Checking for duplicates in: ${playlistName} (${playlistId})`);
         try {
-            const trackItems = await fetchPlaylistTracks(token, playlistId); // uses token
+            const trackItems = await fetchPlaylistTracks(token, playlistId);
             if (!trackItems || trackItems.length === 0) {
                 alert("Playlist is empty.");
                 setIsRemovingDuplicates(false); setLoadingPlaylistIdForAction(null); return;
@@ -293,19 +342,18 @@ function Spotify({ token, onLogout, key: refreshKey }) {
                 alert("No duplicate tracks found.");
             } else {
                 console.log(`Found ${duplicatesToRemove.length} duplicate occurrences. Removing...`);
-                const result = await removeTracksFromPlaylist(token, playlistId, duplicatesToRemove); // uses token
+                const result = await removeTracksFromPlaylist(token, playlistId, duplicatesToRemove);
                 if (result?.snapshot_id) {
                     alert(`${duplicatesToRemove.length} duplicate track occurrence(s) removed!`);
-                    await handleFetchPlaylists(token); // uses handleFetchPlaylists
+                    await handleFetchPlaylists(token);
                 } else throw new Error("Duplicate removal confirmation missing.");
             }
         } catch (error) {
-            handleApiError(error, onLogout); // uses handleApiError, onLogout
+            handleApiError(error, onLogout);
         } finally {
             setIsRemovingDuplicates(false); setLoadingPlaylistIdForAction(null);
         }
-    // Added handleFetchPlaylists, handleApiError, onLogout dependencies
-    }, [token, loadingPlaylistIdForAction, isRemovingDuplicates, handleApiError, onLogout, handleFetchPlaylists]);
+    }, [token, loadingPlaylistIdForAction, isRemovingDuplicates, playingPlaylistId, handleApiError, onLogout, handleFetchPlaylists]);
 
 
     // --- Render Logic ---
@@ -313,7 +361,8 @@ function Spotify({ token, onLogout, key: refreshKey }) {
     if (!token) return <div>Please log in.</div>;
     if (!currentUserId && (isLoadingPlaylists || !playlists.length)) return <div className="loading-message">Loading user data and playlists...</div>;
 
-    const isAnyActionRunning = !!loadingPlaylistIdForAction;
+    const isAnyActionRunning = !!loadingPlaylistIdForAction || !!playingPlaylistId; // Modified to include playingPlaylistId
+
 
     return (
         <>
@@ -341,6 +390,7 @@ function Spotify({ token, onLogout, key: refreshKey }) {
                                 const isExportingThis = isActionBusyOnThis && isExporting;
                                 const isCleaningThis = isActionBusyOnThis && isRemovingDuplicates;
                                 const isViewingThis = viewingTracksFor?.playlistId === playlist.id;
+                                const isPlayingThis = playingPlaylistId === playlist.id; // <-- NEW
 
                                 return (
                                     <PlaylistItem
@@ -351,14 +401,20 @@ function Spotify({ token, onLogout, key: refreshKey }) {
                                         clearActiveMenu={() => setActivePlaylistIdForMenu(null)}
                                         isTrackViewActive={isViewingThis}
                                         onViewTracks={() => handleViewTracksRequest(playlist.id, playlist.name)}
+                                        
+                                        // --- MODIFIED/NEW PROPS for Playback ---
+                                        onPlayRequest={() => handlePlayPlaylistRequest(playlist.id, playlist.name, playlist.uri || `spotify:playlist:${playlist.id}`)}
+                                        isPlayingThis={isPlayingThis}
+                                        
                                         onShuffle={(moodOrData) => handleShufflePlaylist(playlist.id, playlist.name, moodOrData)}
                                         onExport={() => handleExportPlaylist(playlist.id, playlist.name)}
                                         onClean={() => handleRemoveDuplicates(playlist.id, playlist.name)}
+                                        
                                         isLoadingTracks={isViewingThis && viewingTracksFor.isLoading}
                                         isShufflingThis={isShufflingThis}
                                         isExportingThis={isExportingThis}
                                         isCleaningThis={isCleaningThis}
-                                        isAnyActionRunning={isAnyActionRunning}
+                                        isAnyActionRunning={isAnyActionRunning || isPlayingThis} // Ensure actions are disabled if this specific playlist is playing
                                     />
                                 );
                             })}
