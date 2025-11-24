@@ -24,6 +24,8 @@ function PlaylistItem({
     clearActiveMenu,
     isTrackViewActive,
     onViewTracks,
+    onPlayRequest,      // <-- NEW PROP for play
+    isPlayingThis,      // <-- NEW PROP to indicate if this item is being played
     onShuffle,          // Handles both mood string OR image data
     onExport,
     onClean,
@@ -31,7 +33,7 @@ function PlaylistItem({
     isShufflingThis,    // Covers the ENTIRE shuffle process (incl. prediction)
     isExportingThis,
     isCleaningThis,
-    isAnyActionRunning, // Global busy flag for ANY playlist action
+    isAnyActionRunning, // Global busy flag for ANY playlist action (from parent)
 }) {
     // --- Component State ---
     const [showManualMoodSelector, setShowManualMoodSelector] = useState(false);
@@ -47,22 +49,26 @@ function PlaylistItem({
     // Timer ref for auto-closing modal on success
     const successCloseTimerRef = useRef(null);
 
-    // Determine if THIS specific item is busy
-    const isBusyThisItem = isShufflingThis || isExportingThis || isCleaningThis;
-    // Global busy state for disabling interactions on other items
-    const isAnyActionIncludingShuffleRunning = isAnyActionRunning || isShufflingThis;
+    // Determine if THIS specific item is busy with any of its primary actions
+    const isBusyThisItem = isShufflingThis || isExportingThis || isCleaningThis || isPlayingThis; // Added isPlayingThis
+
+    // Determine if this item should be disabled because another item is busy
+    // isAnyActionRunning is true if any loading action OR any play action is active globally
+    const isDisabledGlobally = isAnyActionRunning && !isBusyThisItem;
+
 
     // --- Modal Control ---
     const openWebcamModal = useCallback((e) => {
         e.stopPropagation();
-        if (isBusyThisItem) return;
+        // Disable if this item is busy OR any other action is running globally
+        if (isBusyThisItem || isAnyActionRunning) return;
         setShowManualMoodSelector(false);
         setIsWebcamReady(false);
         setModalStatus('idle');
         setModalMessage('');
         setIsWebcamModalOpen(true);
         clearActiveMenu();
-    }, [isBusyThisItem, clearActiveMenu]);
+    }, [isBusyThisItem, isAnyActionRunning, clearActiveMenu]);
 
     const closeWebcamModal = useCallback(() => {
         if (successCloseTimerRef.current) {
@@ -84,21 +90,21 @@ function PlaylistItem({
     // --- Manual Shuffle ---
     const handleToggleManualShuffle = (e) => {
         e.stopPropagation();
-        if (isBusyThisItem) return;
+        if (isBusyThisItem || isAnyActionRunning) return;
         setShowManualMoodSelector(prev => !prev);
-     };
+    };
     const handleConfirmManualShuffle = useCallback(async (e) => {
         e.stopPropagation();
-        if (isBusyThisItem) return;
+        if (isBusyThisItem || isAnyActionRunning) return;
         await onShuffle(selectedManualMood);
         setShowManualMoodSelector(false);
         clearActiveMenu();
-    }, [onShuffle, selectedManualMood, isBusyThisItem, clearActiveMenu]);
+    }, [onShuffle, selectedManualMood, isBusyThisItem, isAnyActionRunning, clearActiveMenu]);
 
     // --- Webcam Shuffle ---
     const handleCaptureAndShuffle = useCallback(async (e) => {
         e.stopPropagation();
-        if (!webcamRef.current || !isWebcamReady || isBusyThisItem) {
+        if (!webcamRef.current || !isWebcamReady || isBusyThisItem || isAnyActionRunning) {
             alert("Webcam not ready or another action is already in progress."); return;
         }
         const screenshot = webcamRef.current.getScreenshot();
@@ -108,39 +114,45 @@ function PlaylistItem({
         setModalMessage('Processing facial mood and shuffling playlist...');
 
         try {
-            // Call parent shuffle handler - it handles prediction AND shuffling
             await onShuffle(screenshot);
-            // --- Success State ---
             setModalStatus('success');
             setModalMessage('Shuffle initiated successfully!');
-            successCloseTimerRef.current = setTimeout(closeWebcamModal, 2000); // Auto-close
+            successCloseTimerRef.current = setTimeout(closeWebcamModal, 2000);
         } catch (error) {
-            // --- Error State ---
             console.error("Error captured in PlaylistItem during capture/shuffle:", error);
-             setModalStatus('error');
-             setModalMessage(`Error: ${error.message || 'Unknown error occurred during shuffle.'}`);
-             // Keep modal open on error
+            setModalStatus('error');
+            setModalMessage(`Error: ${error.message || 'Unknown error occurred during shuffle.'}`);
         }
-        // isShufflingThis prop reflects the ongoing process in parent
-
-    }, [webcamRef, isWebcamReady, isBusyThisItem, onShuffle, closeWebcamModal]);
+    }, [webcamRef, isWebcamReady, isBusyThisItem, isAnyActionRunning, onShuffle, closeWebcamModal]);
 
     // --- Other Actions ---
     const handleItemClick = useCallback((e) => {
-        if (isAnyActionIncludingShuffleRunning) return;
+        // The guard 'if (isAnyActionRunning) return;' is handled by the caller in JSX.
+        // If we are here, global isAnyActionRunning is false.
+        // Prevent menu toggle if this item is shuffling (as per original logic derivation)
+        // Other 'isBusyThisItem' states (like playing) might still allow menu toggle,
+        // but their actions within the menu will be disabled.
+        if (isShufflingThis) {
+            return;
+        }
         if (isMenuActive) { clearActiveMenu(); setShowManualMoodSelector(false); }
         else { setActiveMenu(); }
-     }, [isAnyActionIncludingShuffleRunning, isMenuActive, clearActiveMenu, setActiveMenu]);
+    }, [isShufflingThis, isMenuActive, clearActiveMenu, setActiveMenu]);
+
 
     const handleViewClick = useCallback((e) => {
         e.stopPropagation();
-        if (isBusyThisItem) return; onViewTracks();
-     }, [isBusyThisItem, onViewTracks]);
+        if (isBusyThisItem || isAnyActionRunning) return;
+        onViewTracks();
+        // No clearActiveMenu() here as viewing tracks is not a final menu action
+    }, [isBusyThisItem, isAnyActionRunning, onViewTracks]);
 
     const handleSimpleAction = useCallback((actionFn) => (e) => {
-         e.stopPropagation();
-         if (isBusyThisItem) return; actionFn(); clearActiveMenu();
-     }, [isBusyThisItem, clearActiveMenu]);
+        e.stopPropagation();
+        if (isBusyThisItem || isAnyActionRunning) return;
+        actionFn();
+        clearActiveMenu();
+    }, [isBusyThisItem, isAnyActionRunning, clearActiveMenu]);
 
 
     // --- Styling Classes & Busy Text ---
@@ -149,12 +161,14 @@ function PlaylistItem({
         isMenuActive ? 'menu-active' : '',
         isTrackViewActive ? 'tracks-active' : '',
         isBusyThisItem ? 'busy' : '',
-        isAnyActionIncludingShuffleRunning && !isBusyThisItem ? 'disabled-externally' : '',
+        isDisabledGlobally ? 'disabled-externally' : '',
     ].filter(Boolean).join(' ');
 
-    const busyText = isShufflingThis ? 'Shuffling...' :
-                     isExportingThis ? 'Exporting...' :
-                     isCleaningThis ? 'Cleaning...' : 'Busy...';
+    const busyText = isPlayingThis ? 'Playing...' :
+        isShufflingThis ? 'Shuffling...' :
+            isExportingThis ? 'Exporting...' :
+                isCleaningThis ? 'Cleaning...' : 'Busy...';
+
 
     // --- Determine Modal Content ---
     let modalContent = null;
@@ -172,18 +186,17 @@ function PlaylistItem({
                         className="webcam-element-modal"
                         onUserMedia={() => { setIsWebcamReady(true); }}
                         onUserMediaError={(err) => {
-                             console.error("Webcam Error:", err); setIsWebcamReady(false);
-                             alert("Could not access webcam. Please check browser permissions.");
-                             closeWebcamModal();
+                            console.error("Webcam Error:", err); setIsWebcamReady(false);
+                            alert("Could not access webcam. Please check browser permissions.");
+                            closeWebcamModal();
                         }}
                     />
                     {!isWebcamReady && <p className="webcam-loading-text">Initializing webcam...</p>}
                     <button
                         onClick={handleCaptureAndShuffle}
-                        disabled={!isWebcamReady || isShufflingThis} // Disable until ready or if parent is shuffling
+                        disabled={!isWebcamReady || isShufflingThis || isAnyActionRunning} // Check parent's isShufflingThis and global isAnyActionRunning
                         className="capture-button modal-capture"
                     >
-                         {/* Text now relies only on parent shuffling state */}
                         {isShufflingThis ? 'Busy...' : 'Capture & Initiate Shuffle'}
                     </button>
                 </div>
@@ -193,9 +206,7 @@ function PlaylistItem({
         modalContent = (
             <div className="webcam-modal-content processing-content">
                 <p className={`processing-text status-${modalStatus}`}>{modalMessage}</p>
-                 {/* Subtext only shown during processing */}
                 {modalStatus === 'processing' && (<p className="processing-subtext">Please wait...</p>)}
-                 {/* No explicit close/cancel button shown here anymore, use the 'X' or overlay */}
             </div>
         );
     }
@@ -203,53 +214,85 @@ function PlaylistItem({
     return (
         <>
             <li className={itemClasses}>
-                 {/* Main Playlist Info Area */}
-                <div className="playlist-info" onClick={handleItemClick} title={playlist.name}>
+                {/* Main Playlist Info Area */}
+                <div className="playlist-info" onClick={(e) => {
+                    if (isAnyActionRunning && !isBusyThisItem) return; // Prevent opening menu if a *different* item/action is busy
+                    handleItemClick(e);
+                }} title={playlist.name}>
                     <span className="playlist-name">{playlist.name}</span>
-                     <span className="playlist-track-count">({playlist.tracks?.total ?? 0} tracks)</span>
-                     {isBusyThisItem && <span className="status-indicator busy">{busyText}</span>}
-                     {isTrackViewActive && !isBusyThisItem && <span className="status-indicator viewing">Viewing</span>}
+                    <span className="playlist-track-count">({playlist.tracks?.total ?? 0} tracks)</span>
+                    {isBusyThisItem && <span className="status-indicator busy">{busyText}</span>}
+                    {isTrackViewActive && !isBusyThisItem && <span className="status-indicator viewing">Viewing</span>}
                     <span className="dropdown-indicator">{isMenuActive ? '▲' : '▼'}</span>
                 </div>
 
-                 {/* Dropdown Menu */}
+                {/* Dropdown Menu */}
                 {isMenuActive && (
                     <div className="playlist-dropdown professional-dropdown">
-                         {/* View Tracks */}
-                        <button onClick={handleViewClick} disabled={isBusyThisItem || isLoadingTracks || isAnyActionIncludingShuffleRunning} className="action-button dropdown-item">
-                           {isLoadingTracks ? 'Loading...' : (isTrackViewActive ? 'Hide Tracks' : 'View Tracks')}
+                        {/* Play Playlist Button */}
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (isBusyThisItem || isAnyActionRunning) return;
+                                onPlayRequest();
+                                clearActiveMenu();
+                            }}
+                            disabled={isBusyThisItem || isAnyActionRunning}
+                            className="action-button dropdown-item"
+                        >
+                            {isPlayingThis ? 'Playing...' : '▶️ Play Playlist'}
                         </button>
 
-                         {/* Shuffle Manually */}
-                        <button onClick={handleToggleManualShuffle} disabled={isBusyThisItem || isAnyActionIncludingShuffleRunning} className="action-button dropdown-item" aria-expanded={showManualMoodSelector}>
-                           Shuffle Manually...
+                        {/* View Tracks */}
+                        <button onClick={handleViewClick}
+                            disabled={isBusyThisItem || isLoadingTracks || isAnyActionRunning}
+                            className="action-button dropdown-item">
+                            {isLoadingTracks ? 'Loading...' : (isTrackViewActive ? 'Hide Tracks' : 'View Tracks')}
                         </button>
-                        {showManualMoodSelector && !isBusyThisItem && (
+
+                        {/* Shuffle Manually */}
+                        <button onClick={handleToggleManualShuffle}
+                            disabled={isBusyThisItem || isAnyActionRunning}
+                            className="action-button dropdown-item" aria-expanded={showManualMoodSelector}>
+                            Shuffle Manually...
+                        </button>
+                        {showManualMoodSelector && !isBusyThisItem && ( //Also check !isAnyActionRunning for rendering this section? No, button disabled handles it.
                             <div className="manual-mood-selector indented-section">
-                                <select value={selectedManualMood} onChange={(e) => setSelectedManualMood(e.target.value)} onClick={(e) => e.stopPropagation()} disabled={isBusyThisItem || isAnyActionIncludingShuffleRunning}>
+                                <select value={selectedManualMood}
+                                    onChange={(e) => setSelectedManualMood(e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    disabled={isBusyThisItem || isAnyActionRunning}>
                                     {moodOptions.map(mood => (<option key={mood} value={mood}>{mood}</option>))}
                                 </select>
-                                <button onClick={handleConfirmManualShuffle} disabled={isBusyThisItem || isAnyActionIncludingShuffleRunning} className="confirm-button">
+                                <button onClick={handleConfirmManualShuffle}
+                                    disabled={isBusyThisItem || isAnyActionRunning}
+                                    className="confirm-button">
                                     Shuffle with '{selectedManualMood}'
                                 </button>
                             </div>
                         )}
 
-                         {/* Shuffle Webcam */}
-                        <button onClick={openWebcamModal} disabled={isBusyThisItem || isAnyActionIncludingShuffleRunning} className="action-button dropdown-item">
-                           Shuffle using Webcam...
+                        {/* Shuffle Webcam */}
+                        <button onClick={openWebcamModal}
+                            disabled={isBusyThisItem || isAnyActionRunning}
+                            className="action-button dropdown-item">
+                            Shuffle using Webcam...
                         </button>
 
-                         {/* Divider */}
+                        {/* Divider */}
                         <hr className="dropdown-divider" />
 
-                          {/* Export */}
-                        <button onClick={handleSimpleAction(onExport)} disabled={isBusyThisItem || isAnyActionIncludingShuffleRunning} className="action-button dropdown-item">
+                        {/* Export */}
+                        <button onClick={handleSimpleAction(onExport)}
+                            disabled={isBusyThisItem || isAnyActionRunning}
+                            className="action-button dropdown-item">
                             {isExportingThis ? 'Exporting...' : 'Export CSV'}
                         </button>
 
-                          {/* Clean */}
-                        <button onClick={handleSimpleAction(onClean)} disabled={isBusyThisItem || isAnyActionIncludingShuffleRunning} className="action-button dropdown-item">
+                        {/* Clean */}
+                        <button onClick={handleSimpleAction(onClean)}
+                            disabled={isBusyThisItem || isAnyActionRunning}
+                            className="action-button dropdown-item">
                             {isCleaningThis ? 'Cleaning...' : 'Clean Duplicates'}
                         </button>
                     </div>
@@ -264,21 +307,17 @@ function PlaylistItem({
                 contentLabel="Webcam Mood Prediction"
                 closeTimeoutMS={200}
             >
-                 {/* Top-Right Close Button */}
+                {/* Top-Right Close Button */}
                 <button
-                     onClick={closeWebcamModal}
-                     className="modal-close-button top-right"
-                     aria-label="Close webcam modal"
-                      // Allow closing unless successful (auto-closes) or maybe during processing? Your choice.
-                     // Let's allow closing anytime except successful auto-close phase.
-                     disabled={modalStatus === 'success'}
-                 >
-                     &times;
-                 </button>
-
+                    onClick={closeWebcamModal}
+                    className="modal-close-button top-right"
+                    aria-label="Close webcam modal"
+                    disabled={modalStatus === 'success'} // Allow closing unless successful auto-close phase
+                >
+                    &times;
+                </button>
                 <h2>Detect Mood for Shuffle</h2>
-                {modalContent} {/* Render content based on status */}
-
+                {modalContent}
             </Modal>
         </>
     );
